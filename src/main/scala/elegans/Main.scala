@@ -8,7 +8,9 @@ object Main {
   import Schedules._
   import RunningMethods._
 
+
   import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
+  import scala.collection.mutable.ListBuffer
 
   var noErrors = true
 
@@ -19,6 +21,28 @@ object Main {
     processOptions(options map (_.substring(2)))
 
     val allExperiments = Experiments.parseExperiments("specifications/current-specification")
+    println("this is allExperiments")
+    println(allExperiments.size)
+    
+    /*
+    // Generating a list of experiments for which there are multiple fates possible
+    var temp = new ListBuffer[Experiment]()
+    for (experiment <- allExperiments) {
+      if(experiment.fates.size > 1) {
+        //var numOfFates = experiment.fates.size
+        val mutstring = experiment.mutations
+        var seqFates = experiment.fates.toSeq
+        for (indFate <- seqFates) {
+            //var newexperiment = experiment.mutations
+            var newexperiment = mutstring + ", " + indFate.mkString("")
+            temp += newexperiment
+        }
+      }
+    }
+    val multipleFateExperiments = temp.toList
+    println("this is final:")
+    println(multipleFateExperiments)
+    */
 
     val toCheck = restrictExperimentRange(allExperiments)
 
@@ -33,6 +57,7 @@ object Main {
       case CompareOutcomeSets(outcomeSets) => runDifferentiation(outcomeSets)
       case SimplifyAutomata => runSimplification(toCheck)
       case SummarizeTraces => runSummarization(toCheck)
+      case SummarizeSchedules => runScheduleSummarization(toCheck)
       case CollectFates => runFateCollection(toCheck)
     }
 
@@ -126,6 +151,10 @@ object Main {
 
   private def runSummarization(toCheck: List[Experiment]) = {
     TraceSummarization.summarizeExperiments(toCheck, Settings.solution)
+  }
+
+  private def runScheduleSummarization(toCheck : List[Experiment]) {
+      ScheduleSummarization.summarizeSchedules(toCheck, Settings.solution) 
   }
 
   private def runSimply(toCheck: List[Experiment]) = {
@@ -302,6 +331,9 @@ object Main {
         }
         case s if s == "summarize" => {
           Settings.setRunningMethod(SummarizeTraces)
+        }
+        case s if s == "summarizeSchedules" => {
+          Settings.setRunningMethod(SummarizeSchedules)
         }
         case s if s == "collect" => {
           Settings.setRunningMethod(CollectFates)

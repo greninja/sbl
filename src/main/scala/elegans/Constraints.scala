@@ -151,7 +151,10 @@ object Constraints {
       }
     }
 
-    val fateDisjunction = for (fate <- experiment.fates) yield {
+    var setoffates = experiment.fates
+    var firstfateinExperiment = Set(setoffates.head) 
+
+    val fateDisjunction = for (fate <- firstfateinExperiment) yield {
       val patternConjunction = for ((asyncCell, cellFate) <- asyncCells zip fate) yield {
         exclusiveFate(asyncCell, cellFate)
       }
@@ -566,6 +569,26 @@ object Constraints {
    * @return `None` if there are no counterexamples, a counterexample schedule
    * otherwise. 
    */
+  def synthesizeSchedule(experiment : Experiment, solution : Option[Solution]) : Option[CoarseSchedule] = {
+    restartZ3()
+
+    assertExperiments(Settings.runLength, None, solution, List(experiment), AssertFateDecision)
+
+    ctx.checkAndGetModel match {
+      case (Some(true), m) => {
+        val cexSchedule = recoverSchedule(m)
+        m.delete
+        Some(cexSchedule)
+      }
+      case (Some(false), _) => {
+        None
+      }
+      case (None, _) => {
+        terminate("No schedule for fate!")
+      }
+    }
+  }
+
   def verify(experiment: Experiment, solution: Solution): Option[CoarseSchedule] = {
     restartZ3()
 
@@ -651,7 +674,7 @@ object Constraints {
       var history: History = null
 
       Statistics.solverCalled()
-      val models = ctx.checkAndGetAllModels.take(2)
+      val models = ctx.checkAndGetAllModels.take(1)
       Statistics.solverReturned()
 
       for (m <- models) {

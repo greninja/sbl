@@ -14,4 +14,5 @@ object RunningMethods {
   case object SimplifyAutomata extends RunningMethod
   case object SummarizeTraces extends RunningMethod
   case object CollectFates extends RunningMethod
+  case object SummarizeSchedules extends RunningMethod
 }
