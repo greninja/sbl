@@ -8,17 +8,21 @@ object Constraints {
 
   import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
 
+  import java.io._
+
   import z3.scala._
   import z3.scala.dsl._
 
   import TimerLogic._
 
   private var ctx_ : Z3Context = null
+  private var solver_ : Z3Solver = null
   private var portVars_   = MutableMap[Int, MutableMap[Port, Z3AST]]()
   private var channelVars = MutableMap[Int, MutableMap[(Cell, Cell), Z3AST]]()
   private var scheduleSolutionReference = MutableMap[Int, MutableMap[Int, Z3AST]]()
 
   def ctx       = ctx_
+  def solver    = solver_
   def portVars  = portVars_
 
   private var semantics = List(TimerSemantics, StatefulSemantics)
@@ -100,7 +104,7 @@ object Constraints {
 
   private def restartZ3() {
     if (ctx != null) ctx.delete
-    ctx_ = new Z3Context("MODEL" -> true)
+    ctx_ = new Z3Context("MODEL" -> true, "PROOF"->true)
     portVars_ = MutableMap[Int, MutableMap[Port, Z3AST]]()
     channelVars = MutableMap[Int, MutableMap[(Cell, Cell), Z3AST]]()
     scheduleSolutionReference = MutableMap[Int, MutableMap[Int, Z3AST]]()
@@ -131,19 +135,27 @@ object Constraints {
   private def assertFates(asyncCells: List[Cell], experiment: Experiment, finalIndex: Int, fateAssertionMethod: FateAssertionMethod) {
     def exclusiveFate(cell: Cell, fate: String) = {
       val allOutcomes = cell.outcomeBundles.keySet
+      
+   
+
       cell.outcomeBundles.get(fate) match {
         case None => logWarning("No bundle for fate " + fate + " in cell " + cell); ctx.mkTrue
         case Some(bundleSet) => {
           val valueEnabled = bundleSet.foldLeft(ctx.mkFalse) {
             case (ast, bundle) => ctx.mkOr(ast, portVars(finalIndex)(bundle.ports(0)))
           }
+         
+
           val otherOutcomes = allOutcomes - fate
+     
+
           val othersDisabled = otherOutcomes.foldLeft(ctx.mkTrue) {
             case (ast, otherVal) => {
               val otherValEnabled = cell.outcomeBundles(otherVal).foldLeft(ctx.mkFalse) {
                 case (innerAst, otherBundle) => ctx.mkOr(innerAst, portVars(finalIndex)(otherBundle.ports(0)))
               }
               ctx.mkAnd(ast, ctx.mkNot(otherValEnabled))
+
             }
           }
           ctx.mkAnd(valueEnabled, othersDisabled)
@@ -152,9 +164,11 @@ object Constraints {
     }
 
     var setoffates = experiment.fates
-    var firstfateinExperiment = Set(setoffates.head) 
-
-    val fateDisjunction = for (fate <- firstfateinExperiment) yield {
+    var fateofExperiment = Set(setoffates.head) 
+    println("Fate is :")
+    println(fateofExperiment)
+    
+    val fateDisjunction = for (fate <- fateofExperiment) yield {
       val patternConjunction = for ((asyncCell, cellFate) <- asyncCells zip fate) yield {
         exclusiveFate(asyncCell, cellFate)
       }
@@ -166,12 +180,18 @@ object Constraints {
       if (fateDisjunction.isEmpty) ctx.mkTrue 
       else fateDisjunction.foldLeft(ctx.mkFalse)(ctx.mkOr(_, _))
 
+    println("fateconstraint is : ")
+    println(fateCnstr)
+
     fateAssertionMethod match {
       case AssertFateDecision =>
         assertConstraint(fateCnstr)
       case AssertNegatedFateDecision =>
         if (fateDisjunction.isEmpty) logWarning("Verifying against any fate pattern.")
-        assertConstraint(ctx.mkNot(fateCnstr))
+        val to_assert = ctx.mkNot(fateCnstr)
+        println("printing negated fate constraint")
+        println(to_assert)
+        assertConstraint(to_assert) 
       case AssertNoFateDecision =>
     }
   }
@@ -180,6 +200,7 @@ object Constraints {
       scheduleLength: Int, concreteSchedule: Option[List[MacroStep]], 
       solution: Option[Solution], experiments: Seq[Experiment], 
       fateAssertionMethod: FateAssertionMethod) {
+    
     def makePortVars(cell: Cell, scheduleLength: Int) {
       for (idx <- 0 to scheduleLength) {
         portVars(idx) = portVars.getOrElse(idx, MutableMap())
@@ -312,7 +333,7 @@ object Constraints {
       }
     }
 
-    def config2ast(c: Configuration): Z3AST = c match {
+    def config2ast(c: Configuration) : Z3AST = c match {
       case Disabled => disabled()
       case EnabledRight => rightEnabled()
       case EnabledLeft => leftEnabled()
@@ -323,6 +344,7 @@ object Constraints {
         for (((c1, c2), config) <- stepConfigs) {
           val channelVar = channelVars(t)((c1, c2))
           val toAssert = ctx.mkEq(channelVar, config2ast(config))
+         
           assertConstraint(toAssert)
         }
       }
@@ -330,8 +352,10 @@ object Constraints {
 
     def assertExperiment(experiment: Experiment, fateAssertionMethod: FateAssertionMethod) {
       val (alwaysRunningCells, aPrioriChannels, asyncCells) = createSystem(experiment)
+   
 
-      val allCells = alwaysRunningCells ::: asyncCells
+
+    val allCells = alwaysRunningCells ::: asyncCells
 
       solution match {
         case Some(sol) => 
@@ -360,6 +384,9 @@ object Constraints {
       
       val interAsyncCellChannels = asyncChannelBuffer.toList
 
+      //println("interAsyncCellChannels are : ")
+      //println(interAsyncCellChannels)
+
       // create channel variables in solver and restrict their range
       makeChannelVars(aPrioriChannels, interAsyncCellChannels, scheduleLength)
       assertChannelRanges()
@@ -377,6 +404,8 @@ object Constraints {
       val aPrioriChannelsMap = 
         (aPrioriChannels map (a => (a, EnabledRight))).toMap[(Cell, Cell), Configuration]
       val aPrioriConfigsPerStep = (0 until scheduleLength) map (t => (t, aPrioriChannelsMap))
+      //println("aPrioriConfigsPerStep")
+      //println(aPrioriConfigsPerStep)
       assertChannelValues(aPrioriConfigsPerStep.toMap)
 
       // if we have a concrete schedule, assert it. 
@@ -569,11 +598,8 @@ object Constraints {
    * @return `None` if there are no counterexamples, a counterexample schedule
    * otherwise. 
    */
-  def synthesizeSchedule(experiment : Experiment, solution : Option[Solution]) : Option[CoarseSchedule] = {
-    restartZ3()
-
-    assertExperiments(Settings.runLength, None, solution, List(experiment), AssertFateDecision)
-
+  def synthesizeSchedule(experiment : Experiment, solution : Option[Solution])  = {
+    /*
     ctx.checkAndGetModel match {
       case (Some(true), m) => {
         val cexSchedule = recoverSchedule(m)
@@ -587,6 +613,32 @@ object Constraints {
         terminate("No schedule for fate!")
       }
     }
+   */
+   
+   restartZ3()
+   assertExperiments(Settings.runLength, None, solution, List(experiment), AssertFateDecision)
+   println("first check point")
+   println(ctx.check)
+   var (v, m) = ctx.checkAndGetModel
+   //println("first model:")
+   //println(m)
+   //println("end of first model")
+   
+   val cexSchedule = recoverSchedule(m) 
+   println(cexSchedule)
+   
+   restartZ3()
+   assertExperiments(Settings.runLength, Some(cexSchedule), solution, List(experiment), AssertNegatedFateDecision)
+   println("second check point")
+   println(ctx.check)
+   var (vnew, mnew) = ctx.checkAndGetModel
+   //println("second model:")
+   //println(mnew)
+   //println("end of second model")
+   
+   //var solver = ctx.mkSolver()
+   //var unsatcore = solver.getUnsatCore()
+   //println(unsatcore.toSeq)
   }
 
   def verify(experiment: Experiment, solution: Solution): Option[CoarseSchedule] = {

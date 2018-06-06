@@ -50,7 +50,7 @@ object Visualization {
 
         schedule match {
           case Left(micro) => microsteps append micro
-          case Right(macro) => macrosteps append macro
+          case Right(macro_t) => macrosteps append macro_t
         }
 
         ("rm -f " + dotPath + " " + imagePath).!!

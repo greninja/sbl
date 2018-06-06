@@ -7,15 +7,24 @@ import Invariants._
 
 import scala.util.Random
 
+import z3.scala._
+
 object ScheduleSummarization {
 
+	private var ctx_ : Z3Context = null 
+	def ctx = ctx_
+
 	def summarizeSchedule(e : Experiment, solution : Option[Solution]) = {
+		
+		/*
 		synthesizeSchedule(e, solution) match {
-			case Some(sch) => 
-				println("The generated schedule is:")
-				println(sch)
-			case None => 
-		}
+			case ctx => 
+				println("The generated ctx is:")
+				println(ctx)
+			//case None => 
+		}*/
+		
+		synthesizeSchedule(e, solution)
 	}
 
 	def summarizeSchedules(experiments : Seq[Experiment], 
