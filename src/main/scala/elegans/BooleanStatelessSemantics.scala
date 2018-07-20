@@ -57,8 +57,9 @@ case class BooleanStatelessLogic(outBundle: PortBundle, gate: Gate) extends Logi
 
   /** Assert constraints for deciding output values associated with this logic
    * */
-  def assertLogic(t: Int): Unit = {
+  def assertLogic(t: Int): Option[Seq[Z3AST]] = {
     assertConstraint(ctx.mkIff(portVars(t)(out), gate2ast(gate, t)))
+    None
   }
 
   /** Take one step in concrete evaluation */

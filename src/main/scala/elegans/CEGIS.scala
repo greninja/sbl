@@ -143,6 +143,7 @@ object CEGIS {
       toSeeInSomeRun:   Set[(Experiment, Option[CoarseSchedule])] = Set(),
       toAvoidInSomeRun: Set[(Experiment, Option[CoarseSchedule])] = Set(),
       excludedFromNondeterminismCheck: Set[Experiment] = Set()): Set[Solution] = {
+    
     var continue = true
 
     var nondetCexToSeeInSomeRun = toSeeInSomeRun
@@ -174,6 +175,9 @@ object CEGIS {
       // saveInputSet(inputPairs, cegisLoopCounter)
 
       val fromSynthesizer = Constraints.synthesize(inputPairs, nondetCexToSeeInSomeRun, toAvoidInSomeRun) 
+      println("This is fromsynthesize which is the solution")
+      println(fromSynthesizer)
+      
       fromSynthesizer match {
         case Some(solution) =>
           log("Found candidate!")

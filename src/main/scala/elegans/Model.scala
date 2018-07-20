@@ -29,48 +29,139 @@ object Model {
       activating(hyp)
 
       output(out)
+
+      
+      val ts = Map(
+          
+          ((Seq(2, 1),Seq[Int]()),0) -> 1, 
+          ((Seq(0, 0),Seq[Int]()),1) -> 0, 
+          ((Seq(3, 1),Seq[Int]()),2) -> 2,
+          ((Seq(3, 1),Seq[Int]()),1) -> 2, 
+          ((Seq(3, 0),Seq[Int]()),1) -> 1, 
+          ((Seq(3, 0),Seq[Int]()),2) -> 1, 
+          ((Seq(0, 0),Seq[Int]()),0) -> 0, 
+          ((Seq(0, 1),Seq[Int]()),1) -> 0, 
+          ((Seq(2, 0),Seq[Int]()),1) -> 1, 
+          ((Seq(2, 0),Seq[Int]()),2) -> 1, 
+          ((Seq(3, 1),Seq[Int]()),0) -> 1, 
+          ((Seq(0, 1),Seq[Int]()),0) -> 0, 
+          ((Seq(1, 0),Seq[Int]()),0) -> 1, 
+          ((Seq(2, 1),Seq[Int]()),1) -> 1, 
+          ((Seq(0, 0),Seq[Int]()),2) -> 1, 
+          ((Seq(1, 1),Seq[Int]()),2) -> 1, 
+          ((Seq(3, 0),Seq[Int]()),0) -> 1, 
+          ((Seq(0, 1),Seq[Int]()),2) -> 1, 
+          ((Seq(1, 1),Seq[Int]()),0) -> 1, 
+          ((Seq(1, 0),Seq[Int]()),2) -> 1, 
+          ((Seq(2, 0),Seq[Int]()),0) -> 1, 
+          ((Seq(1, 0),Seq[Int]()),1) -> 1, 
+          ((Seq(2, 1),Seq[Int]()),2) -> 1, 
+          ((Seq(1, 1),Seq[Int]()),1) -> 1 
+          
+      )
+  
+      val ms = Map(
+        2 -> 1, 
+        1 -> 0, 
+        0 -> 0
+      )
+
+      val is = 1
+
+      setImplementation(ts, ms, is)
+      
     })
 
     register(stateful)
   }
 
-  class Sem5 extends Node("sem5") {
-    val let23 = input("let23")("on")
-    val lst   = input("lst")("on")
+  class Lst extends Node("lst") {
+    val lin12       = input("lin12")("low", "med", "high")
+    val ls          = input("ls")("on")(Monotonic)
+    val let23       = input("let23")("on")
 
-    val out   = output("out")("on")
+    val out         = output("out")("on")
 
-    val timer = logic(TimerLogic(out)(lst || let23)(
-      !lst && let23
-    ))
+    val stateful = logic(new StatefulLogic {
+      val off = state("off")  
+      val on  = state("on")
 
-    register(timer)
-  }
+      init(off)
 
-  class Let60 extends Node("let60") {
-    val sem5  = input("sem5")("on")
-    val lst   = input("lst")("on")
+      nbStates(nbLstStates)
 
-    val out   = output("out")("on")
-    
-    val timer = logic(TimerLogic(out)(lst || sem5)(
-      !lst && sem5
-    ))
+      activating(lin12)
+      activating(ls)
+      inhibiting(let23)
 
-    register(timer)
-  }
+      output(out)
 
-  class Mpk1 extends Node("mpk1") {
-    val let60 = input("let60")("on")
-    val lst   = input("lst")("on")
+      
+      val ts = Map(
+        
+        ((Seq(2, 1),Seq(0)),0) -> 2, 
+        ((Seq(3, 0),Seq(1)),2) -> 2, 
+        ((Seq(0, 0),Seq(1)),2) -> 0, 
+        ((Seq(2, 0),Seq(0)),0) -> 1, 
+        ((Seq(2, 0),Seq(0)),2) -> 2, 
+        ((Seq(1, 0),Seq(1)),0) -> 0, 
+        ((Seq(0, 1),Seq(0)),0) -> 0, 
+        ((Seq(0, 0),Seq(0)),1) -> 0, 
+        ((Seq(0, 0),Seq(1)),0) -> 0, 
+        ((Seq(3, 1),Seq(1)),1) -> 1, 
+        ((Seq(0, 0),Seq(0)),2) -> 0, 
+        ((Seq(0, 1),Seq(1)),1) -> 0, 
+        ((Seq(1, 1),Seq(0)),1) -> 0, 
+        ((Seq(3, 0),Seq(1)),1) -> 0,
+        ((Seq(3, 0),Seq(0)),0) -> 1,
+        ((Seq(0, 0),Seq(1)),1) -> 0, 
+        ((Seq(2, 0),Seq(1)),1) -> 0, 
+        ((Seq(3, 1),Seq(1)),2) -> 2, 
+        ((Seq(2, 1),Seq(1)),2) -> 2, 
+        ((Seq(1, 1),Seq(0)),0) -> 0, 
+        ((Seq(3, 0),Seq(0)),1) -> 1,
+        ((Seq(2, 1),Seq(1)),0) -> 0,
+        ((Seq(3, 0),Seq(1)),0) -> 0, 
+        ((Seq(3, 1),Seq(1)),0) -> 0, 
+        ((Seq(3, 1),Seq(0)),2) -> 2, 
+        ((Seq(2, 0),Seq(1)),0) -> 0, 
+        ((Seq(1, 0),Seq(1)),1) -> 0, 
+        ((Seq(2, 0),Seq(0)),1) -> 1, 
+        ((Seq(1, 0),Seq(0)),1) -> 0, 
+        ((Seq(0, 0),Seq(0)),0) -> 0, 
+        ((Seq(1, 0),Seq(1)),2) -> 0,
+        ((Seq(1, 1),Seq(1)),0) -> 0, 
+        ((Seq(1, 1),Seq(0)),2) -> 0, 
+        ((Seq(2, 1),Seq(0)),2) -> 2, 
+        ((Seq(3, 1),Seq(0)),0) -> 2, 
+        ((Seq(0, 1),Seq(0)),2) -> 0, 
+        ((Seq(2, 1),Seq(0)),1) -> 2,
+        ((Seq(0, 1),Seq(1)),0) -> 0,
+        ((Seq(2, 1),Seq(1)),1) -> 1, 
+        ((Seq(1, 0),Seq(0)),2) -> 0, 
+        ((Seq(3, 1),Seq(0)),1) -> 2, 
+        ((Seq(1, 1),Seq(1)),2) -> 0,
+        ((Seq(1, 1),Seq(1)),1) -> 0,
+        ((Seq(2, 0),Seq(1)),2) -> 2, 
+        ((Seq(0, 1),Seq(0)),1) -> 0,
+        ((Seq(3, 0),Seq(0)),2) -> 2, 
+        ((Seq(1, 0),Seq(0)),0) -> 0,
+        ((Seq(0, 1),Seq(1)),2) -> 0
+      )
+      
+      val ms =  Map(
+        2 -> 1,
+        1 -> 0, 
+        0 -> 0
+      )
+      
+      val is = 1
 
-    val out   = output("out")("on")
+      setImplementation(ts, ms, is)
+      
+    })
 
-    val timer = logic(TimerLogic(out)(lst || let60)(
-      !lst && let60
-    ))
-
-    register(timer)
+    register(stateful)
   }
 
   class Lin12(mutation: String) extends Node("lin12") {
@@ -90,6 +181,7 @@ object Model {
 
       output(out)
 
+      
       val ts = Map(
         ((Seq[Int](), Seq[Int]()), 0) -> 0,
         ((Seq[Int](), Seq[Int]()), 1) -> 1,
@@ -107,6 +199,7 @@ object Model {
       val is = 3
 
       setImplementation(ts, ms, is)
+      
     })
 
     val statefulWT = logic(new StatefulLogic {
@@ -185,29 +278,43 @@ object Model {
     }
   }
 
-  class Lst extends Node("lst") {
-    val lin12       = input("lin12")("low", "med", "high")
-    val ls          = input("ls")("on")(Monotonic)
-    val let23       = input("let23")("on")
+  class Sem5 extends Node("sem5") {
+    val let23 = input("let23")("on")
+    val lst   = input("lst")("on")
 
-    val out         = output("out")("on")
+    val out   = output("out")("on")
 
-    val stateful = logic(new StatefulLogic {
-      val off = state("off")  
-      val on  = state("on")
+    val timer = logic(TimerLogic(out)(lst || let23)(
+      !lst && let23
+    ))
 
-      init(off)
+    register(timer)
+  }
 
-      nbStates(nbLstStates)
+  class Let60 extends Node("let60") {
+    val sem5  = input("sem5")("on")
+    val lst   = input("lst")("on")
 
-      activating(lin12)
-      activating(ls)
-      inhibiting(let23)
+    val out   = output("out")("on")
+    
+    val timer = logic(TimerLogic(out)(lst || sem5)(
+      !lst && sem5
+    ))
 
-      output(out)
-    })
+    register(timer)
+  }
 
-    register(stateful)
+  class Mpk1 extends Node("mpk1") {
+    val let60 = input("let60")("on")
+    val lst   = input("lst")("on")
+
+    val out   = output("out")("on")
+
+    val timer = logic(TimerLogic(out)(lst || let60)(
+      !lst && let60
+    ))
+
+    register(timer)
   }
 
   class Ls extends Node("ls") {

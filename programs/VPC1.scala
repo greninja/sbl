@@ -82,7 +82,7 @@ object Model {
       val off = state("off")  
       val low = state("low")  
       val med = state("med")  
-      val high = state("high")  
+      val high = state("high") 
 
       init(high)
 

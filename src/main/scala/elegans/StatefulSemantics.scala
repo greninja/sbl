@@ -58,6 +58,7 @@ object StatefulSemantics extends Semantics {
     solverSolution = None
   }
 
+  // val transitions = MutableMap[String, MutableMap[(InputValue, InternalState), Z3AST]]()
   /** Extract synthesis solution from model */
   def solution(model: Z3Model): Solution = {
     val concreteTransitions = for ((id, table) <- transitions) yield {
@@ -106,7 +107,7 @@ object StatefulSemantics extends Semantics {
   def assertCons(c: Z3AST) = {
     // println("ASSERTING")
     // println(c)
-    ctx.assertCnstr(c)
+    solver.assertCnstr(c)
   }
 
   def assertCons(c: Tree[BoolSort]) = {
@@ -130,7 +131,9 @@ object StatefulSemantics extends Semantics {
       val withNewValues = restCombinations map (combination =>
         allInputValues(signal) map (value => value +: combination)
       )
+     
       withNewValues.flatten
+
   }
 
 }
@@ -178,6 +181,8 @@ case class StatefulLogic() extends Logic {
     val activating = signalValueCombinations(activatingSignals_)
     val inhibiting = signalValueCombinations(inhibitingSignals_)
     val inputValues = for (av <- activating; iv <- inhibiting) yield (av, iv)
+    
+ 
 
     // cross them with all possible source states
     for (iv <- inputValues; stateIdx <- 0 until tableSize) yield (iv, stateIdx)
@@ -272,6 +277,8 @@ case class StatefulLogic() extends Logic {
     case Some(_) => // do nothing if initial state is already populated
   }
 
+  // type InternalState = Int
+  //val stateMappings = MutableMap[String, MutableMap[InternalState, Z3AST]]()
   def populateStateMapping(): Unit = stateMappings.get(id) match {
     case None => {
       val toPopulate = MutableMap[InternalState, Z3AST]()
@@ -369,6 +376,39 @@ case class StatefulLogic() extends Logic {
     nbInternalStates_ = n
   }
 
+  /** Assert constraints for deciding output values associated with this logic
+   * */
+  def assertLogic(t: Int) : Option[Seq[Z3AST]] = {
+    // make an int variable that represents each input's strength at this time
+    val activatingIntVars = activatingSignals_ map (bundle2intVar(_, t))
+    val inhibitingIntVars = inhibitingSignals_ map (bundle2intVar(_, t))
+
+    // we are then going to unroll for each value of inputs and for each value
+    // of the state the definition of the transition
+    val inputsAreCovered = scala.collection.mutable.Set[Z3AST]()
+    transitions.get(id) match {
+      case Some(table) => {
+        for ((key, value) <- table) {
+          val (cnstr, inputCond) = transitionConstraint(activatingIntVars, inhibitingIntVars, key, value, t)
+          /*println("these are cnstr and inputcond")
+          println(cnstr)
+          println(inputCond)*/ 
+          inputsAreCovered += inputCond
+          assertCons(cnstr)
+        }
+      }
+      case None => logError("No transition table for logic: " + this.id)
+    }
+    
+    // don't forget to assert value of output variable
+    assertOutput(stateVar(t), t)
+    
+    if (this.id == "let23#1")
+        Some(activatingIntVars)
+    else 
+        None 
+  }
+
   /** Returns a symbolic integer that is constrained to the input bundle value
    * at time t */
   private def bundle2intVar(input: PortBundle, t: Int): Z3AST = {
@@ -378,6 +418,27 @@ case class StatefulLogic() extends Logic {
     assertCons(relaxedBooleanIntEquivalence(input, t, fresh))
 
     fresh
+  }
+
+  private def relaxedBooleanIntEquivalence(bundle: PortBundle, t: Int, intVar: Z3AST): Z3AST = {
+    val is = ctx.mkIntSort
+    val bundlePorts = bundle.ports
+
+    // if all ports are false then integer value is 0
+    val allFalse = ctx.mkAnd(bundlePorts.map(port => ctx.mkNot(portVars(t)(port))): _*)
+    val zeroCond = ctx.mkIff(allFalse, ctx.mkEq(intVar, ctx.mkInt(0, is)))
+
+    // if any port is activated and the greater ones are disabled, the integer
+    // value is the 1-based index
+    val otherConds = for ((p, idx) <- bundlePorts zipWithIndex) yield {
+      val thisPortEnabled = portVars(t)(p)
+      val nextPortsDisabled = bundlePorts.drop(idx + 1).map(other => ctx.mkNot(portVars(t)(other)))
+      val portCond = ctx.mkAnd((thisPortEnabled +: nextPortsDisabled): _*)
+      ctx.mkIff(portCond, ctx.mkEq(intVar, ctx.mkInt(idx + 1, is)))
+    }
+
+    val toConjunct = zeroCond +: otherConds
+    ctx.mkAnd(toConjunct: _*)
   }
 
   /** Asserts that the output bundle at time t is equal to the value of the
@@ -412,6 +473,9 @@ case class StatefulLogic() extends Logic {
       ctx.mkIff(portVars(t)(p), ctx.mkEq(intVar, ctx.mkInt(idx + 1, is)))
     }
 
+    //println("these are other conditions")
+    //println(otherConds)
+
     // for sanity, add bound constraints
     val bounds = ctx.mkAnd(
       ctx.mkGE(intVar, ctx.mkInt(0, is)),
@@ -419,27 +483,6 @@ case class StatefulLogic() extends Logic {
     )
 
     val toConjunct = Seq(zeroCond, bounds) ++ otherConds
-    ctx.mkAnd(toConjunct: _*)
-  }
-
-  private def relaxedBooleanIntEquivalence(bundle: PortBundle, t: Int, intVar: Z3AST): Z3AST = {
-    val is = ctx.mkIntSort
-    val bundlePorts = bundle.ports
-
-    // if all ports are false then integer value is 0
-    val allFalse = ctx.mkAnd(bundlePorts.map(port => ctx.mkNot(portVars(t)(port))): _*)
-    val zeroCond = ctx.mkIff(allFalse, ctx.mkEq(intVar, ctx.mkInt(0, is)))
-
-    // if any port is activated and the greater ones are disabled, the integer
-    // value is the 1-based index
-    val otherConds = for ((p, idx) <- bundlePorts zipWithIndex) yield {
-      val thisPortEnabled = portVars(t)(p)
-      val nextPortsDisabled = bundlePorts.drop(idx + 1).map(other => ctx.mkNot(portVars(t)(other)))
-      val portCond = ctx.mkAnd((thisPortEnabled +: nextPortsDisabled): _*)
-      ctx.mkIff(portCond, ctx.mkEq(intVar, ctx.mkInt(idx + 1, is)))
-    }
-
-    val toConjunct = zeroCond +: otherConds
     ctx.mkAnd(toConjunct: _*)
   }
 
@@ -596,31 +639,7 @@ case class StatefulLogic() extends Logic {
     }
   }
 
-  /** Assert constraints for deciding output values associated with this logic
-   * */
-  def assertLogic(t: Int): Unit = {
-    // make an int variable that represents each input's strength at this time
-    val activatingIntVars = activatingSignals_ map (bundle2intVar(_, t))
-    val inhibitingIntVars = inhibitingSignals_ map (bundle2intVar(_, t))
-    
-    // we are then going to unroll for each value of inputs and for each value
-    // of the state the definition of the transition
-    val inputsAreCovered = scala.collection.mutable.Set[Z3AST]()
-    transitions.get(id) match {
-      case Some(table) => {
-        for ((key, value) <- table) {
-          val (cnstr, inputCond) = transitionConstraint(activatingIntVars, inhibitingIntVars, key, value, t)
-          inputsAreCovered += inputCond
-          assertCons(cnstr)
-        }
-      }
-      case None => logError("No transition table for logic: " + this.id)
-    }
-    
-    // don't forget to assert value of output variable
-    assertOutput(stateVar(t), t)
-  }
-
+  //This is not used anywhere else in the codebase
   private def onlyOneTrue(asts: Seq[Z3AST]) = {
     val allPossibleInputSpace = for (astTrue <- asts) yield {
       val astFalses = asts filter (_ != astTrue)
@@ -709,8 +728,8 @@ case class StatefulLogic() extends Logic {
   def setImplementation(
     tr: Map[(InputValue, InternalState), InternalState],
     sm: Map[InternalState, ExternalState],
-    is: InternalState
-  ) {
+    is: InternalState) {
+
     setImplementation(
       MutableMap() ++ tr,
       MutableMap() ++ sm,
@@ -721,8 +740,7 @@ case class StatefulLogic() extends Logic {
   def setImplementation(
     tr: MutableMap[(InputValue, InternalState), InternalState],
     sm: MutableMap[InternalState, ExternalState],
-    is: InternalState
-  ) {
+    is: InternalState) {
     implementation = Some((tr, sm, is))
   }
 }
@@ -734,4 +752,3 @@ case class StatefulLogicSolution(
   stateMappings: MutableMap[String, MutableMap[InternalState, ExternalState]],
   initialInternalState: MutableMap[String, InternalState]
 ) extends LogicSolution
-

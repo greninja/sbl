@@ -37,7 +37,7 @@ object Interpreter {
 
       allCells foreach (_.sanityCheck())
 
-      val visualizer = new Visualization.Visualizer()
+      //val visualizer = new Visualization.Visualizer()
 
       candidateHistory(0) = portValues(allCells)
       val initSteps = initialSteps(nonVPCs, aPrioriChannels, vpcs)
@@ -50,8 +50,8 @@ object Interpreter {
         for (microstep <- microsteps) {
           val stepForAllCells = (nonVPCs map (_ => true)) ::: microstep
 
-          if (Settings.showGUI)
-            visualizer.microSnapshot(allCells, stepForAllCells)
+          //if (Settings.showGUI)
+            //visualizer.microSnapshot(allCells, stepForAllCells)
 
           takeStep(allCells, stepForAllCells)
         }
@@ -59,16 +59,16 @@ object Interpreter {
         candidateHistory(i + 1) = portValues(allCells)
       }
 
-      if (Settings.showGUI)
-        visualizer.microSnapshot(allCells, Nil)
+      //if (Settings.showGUI)
+        //visualizer.microSnapshot(allCells, Nil)
 
       // assert correct fate decisions
       throw new Exception("FATE DECISION CHECKS NEED TO BE REVISED.")
 
       // log("  Decided: " + (vpcs map decidedFate).mkString(", "))
 
-      if (Settings.showGUI)
-        visualizer.show()
+      //if (Settings.showGUI)
+        //visualizer.show()
 
       if (!runOK) {
         logWarning("Failed check for " + experiment)

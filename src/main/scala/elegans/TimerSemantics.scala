@@ -26,6 +26,7 @@ object TimerSemantics extends Semantics {
   def restart(): Unit = {
     holes = MutableMap[(List[Port], String), HoleExpression]()
     triggers = MutableMap[Int, MutableMap[Logic, Z3AST]]()
+    lsVarsRef = MutableMap[Int, Seq[Z3AST]]()
   }
 
   /** Extract synthesis solution from model */
@@ -35,6 +36,7 @@ object TimerSemantics extends Semantics {
       (id, TimerSolution(qmm(lst1)))
     }
     ret
+
   }
 
   /** Given the global solution instance, concretize logic instances 
@@ -60,18 +62,30 @@ object TimerSemantics extends Semantics {
   }
 
   private def disableInitialTriggers(cells: List[Cell]): Unit = {
-    for (c <- cells)
+    for (c <- cells) 
       for (n <- c.N)
-        for (tl @ TimerLogic(_, _, _) <- n.logics)
-          assertConstraint(!triggers(0)(tl))
+        for (tl @ TimerLogic(_, _, _) <- n.logics) {
+          assertConstraint(ctx.mkNot(triggers(0)(tl)))
+        }
+   
+
   }
 
   private def assertTriggers(cells: List[Cell], scheduleLength: Int) {
     for (t <- 1 to scheduleLength) {
+      lsVarsRef(t) = Seq[Z3AST]()
       for (cell <- cells) {
         for (n <- cell.N) {
           for (tl @ TimerLogic(_, triggerPred, _) <- n.logics) {
             val value = ctx.mkOr(triggers(t - 1)(tl), pred2ast(triggerPred, t))
+            if(n.toString == "VPC_1_ls") {
+              val portvariable = n.P.toSeq(0)
+              lsVarsRef(t) = lsVarsRef(t) :+ portVars(t)(portvariable)
+            }
+            if(n.toString == "VPC_6_ls") {
+              val portvariable = n.P.toSeq(1)
+              lsVarsRef(t) = lsVarsRef(t) :+ portVars(t)(portvariable) 
+            }
             assertConstraint(ctx.mkIff(triggers(t)(tl), value))
           }
         }
@@ -81,6 +95,7 @@ object TimerSemantics extends Semantics {
 
   private var triggers    = MutableMap[Int, MutableMap[Logic, Z3AST]]()
   private var holes       = MutableMap[(List[Port], String), HoleExpression]()
+  var lsVarsRef   = MutableMap[Int, Seq[Z3AST]]()
 
   class HoleExpression(val ports: List[Port]) {
     def allCombinations(l: List[Predicate]): List[List[Predicate]] = l match {
@@ -243,7 +258,7 @@ case class TimerLogic(out: Port,
 
   /** Assert constraints for deciding output values associated with this logic
    * */
-  def assertLogic(t: Int): Unit = {
+  def assertLogic(t: Int) : Option[Seq[Z3AST]] = {
     val activeAtLastStep = if (t == 0) 
       ctx.mkFalse else portVars(t - 1)(out)
     val logicUnrolling = for ((pred, i) <- predicates zipWithIndex;
@@ -255,6 +270,7 @@ case class TimerLogic(out: Port,
     }
     val value = ctx.mkOr(activeAtLastStep, ctx.mkOr(logicUnrolling.toList: _*))
     assertConstraint(ctx.mkIff(portVars(t)(out), value))
+    None
   }
 
   def concretize(sol: Solution): Unit = {
@@ -295,7 +311,9 @@ case class TimerLogic(out: Port,
   }
 
   def assertInitialOutputValues() {
-    ctx.assertCnstr(!portVars(0)(out))
+    //ctx.assertCnstr(!portVars(0)(out))
+    //assertConstraint(ctx.mkNot(portVars(0)(out)))
+    assertConstraint(ctx.mkNot(portVars(0)(out)))
   }
 
   override def toString = {
@@ -324,7 +342,7 @@ case class TimerLogic(out: Port,
   def inhibiting(ps: Port*) {
     inhibitingOrders += ps.toList
   }
-}
+} 
 
 object TimerLogic {
   def apply(out: PortBundle)(trigger: Predicate)(ps: Predicate*) = {

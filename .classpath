@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src/main/scala"/>
+	<classpathentry kind="lib" path="lib/linux/scalaz3-unix-64b-2.1.1.jar" sourcepath="/home/shadab/PROJECTDIR/sbl/lib/linux/scalaz3-unix-64b-2.1.1.jar"/>
+	<classpathentry kind="lib" path="lib/mac/scalaz3-osx-64b-2.1.jar"/>
+	<classpathentry kind="lib" path="sdb-1.1.0-M3-2.10.jar"/>
+	<classpathentry kind="con" path="org.scala-ide.sdt.launching.SCALA_CONTAINER"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="output" path="target/scala-2.10/classes"/>
+</classpath>

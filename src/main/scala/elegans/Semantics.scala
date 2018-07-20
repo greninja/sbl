@@ -31,7 +31,7 @@ trait Logic {
 
   /** Assert constraints for deciding output values associated with this logic
    * */
-  def assertLogic(t: Int): Unit
+  def assertLogic(t: Int) : Option[Seq[Z3AST]]
 
   /** Take one step in concrete evaluation */
   def act(): Unit

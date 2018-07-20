@@ -21,8 +21,8 @@ object Main {
     processOptions(options map (_.substring(2)))
 
     val allExperiments = Experiments.parseExperiments("specifications/current-specification")
-    println("this is allExperiments")
-    println(allExperiments.size)
+    //println("this is allExperiments")
+    //println(allExperiments.size)
     
     /*
     // Generating a list of experiments for which there are multiple fates possible
@@ -118,6 +118,8 @@ object Main {
   private def runVerifier(toCheck: List[Experiment]) {
     // Instantiate a dummy solution if no file was specified
     val sol = Settings.solution.getOrElse(Map())
+    println("this is the solution")
+    println(sol)
     noErrors &&= Constraints.verify(toCheck, sol)
   }
 
