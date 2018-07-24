@@ -8,6 +8,7 @@ object Constraints {
   import TimerSemantics._
   
   import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
+  
 
   import java.io._
 
@@ -28,6 +29,7 @@ object Constraints {
   //Maps from tracking variables to non-deterministic variables plus their
   private var trackScheduleVarsMap = MutableMap[Z3AST, (Z3AST, Z3AST)]()
   private var trackAcHypVarsMap = MutableMap[Z3AST, (Z3AST, Int)]()
+  private var trackLsVarsMap    = MutableMap[Z3AST, (Z3AST, Boolean)]()
 
   def ctx       = ctx_
   def solver    = solver_
@@ -130,6 +132,7 @@ object Constraints {
     
     trackScheduleVarsMap = MutableMap[Z3AST, (Z3AST, Z3AST)]()
     trackAcHypVarsMap = MutableMap[Z3AST, (Z3AST, Int)]()
+    trackLsVarsMap   =  MutableMap[Z3AST, (Z3AST, Boolean)]()
     
     schedulesExperimentsCells = MutableMap[CoarseSchedule, MutableMap[Experiment, List[Cell]]]()
     semantics.map(_.restart())
@@ -477,17 +480,18 @@ object Constraints {
             val interAsyncCellChannelsMap = (interAsyncCellChannels zip macroStep).toMap
             (t, interAsyncCellChannelsMap)
           }
-          assertChannelValues(mapsPerStep.toMap)
+          //assertChannelValues(mapsPerStep.toMap)
           
           // Tracking the schedule variables with boolean variables
           for ((t, stepConfigs) <- mapsPerStep.toMap) {
             var counter = 0
             for (((c1, c2), config) <- stepConfigs) {
                   counter += 1
+                  val astconfig = config2ast(config)
                   val channelVar = channelVars(t)((c1, c2))
-                  val toAssert = ctx.mkEq(channelVar, config2ast(config))
+                  val toAssert = ctx.mkEq(channelVar, astconfig)
                   val tvar = ctx.mkBoolConst("trSch"+"_"+t+"_"+counter)
-                  trackScheduleVarsMap(tvar) = (channelVar, config2ast(config))
+                  trackScheduleVarsMap(tvar) = (channelVar, astconfig)
                   assertConstraint(ctx.mkImplies(tvar, toAssert))
                 }
           }  
@@ -751,7 +755,7 @@ object Constraints {
   def synthesizeSchedule(experiment : Experiment, solution : Option[Solution])  = {
 
    
-   // Generating a solution as we do not want holes for our purpose (schedulesummarization)
+   //Generating a solution as we do not want holes for our purpose (schedulesummarization)
    //val sol = synthesizeHolesForScheduleSummarization(experiment)
    //println("this is solution")
    //println(sol)   
@@ -778,7 +782,7 @@ object Constraints {
       //    println("UNSAT")
       //}
 
-    }
+   }
    
    // Writing the output to a file
    val file1 = new File("Model1_10TimeSteps")
@@ -811,7 +815,7 @@ object Constraints {
           val astvariable = AcHypValueReference(timestep)(cellid)(s)
           val intvariable = AcHypExtractedValues(timestep)(cellid)(s)
           val toAssert = ctx.mkEq(astvariable, ctx.mkInt(intvariable, ctx.mkIntSort))
-          assertConstraint(toAssert)
+          //assertConstraint(toAssert)
 
           val trvar = ctx.mkBoolConst("trAcHyp"+"_"+timestep+"_"+cellid+"_"+s)
           assertConstraint(ctx.mkImplies(trvar, toAssert))
@@ -826,13 +830,21 @@ object Constraints {
     for (s <- 0 until 2) {
       val astvariable = lsVarsRef(timestep)(s)
       val boolvariable = LsExtractedValues(timestep)(s)
-      if (boolvariable == true) 
-        assertConstraint(ctx.mkEq(astvariable, ctx.mkTrue))
-      else
-        assertConstraint(ctx.mkEq(astvariable, ctx.mkFalse))
+      if (boolvariable == true) {
+        val toAssert = ctx.mkEq(astvariable, ctx.mkTrue)
+        //assertConstraint(toAssert)
+        val trvar = ctx.mkBoolConst("trLs"+"_"+timestep+"_"+s)
+        assertConstraint(ctx.mkImplies(trvar, toAssert))  
+        trackLsVarsMap(trvar) = (astvariable, boolvariable)  
+      } else {
+        val toAssert = ctx.mkEq(astvariable, ctx.mkFalse)
+        //assertConstraint(toAssert)
+        val trvar = ctx.mkBoolConst("trLs"+"_"+timestep+"_"+s)
+        assertConstraint(ctx.mkImplies(trvar, toAssert))
+        trackLsVarsMap(trvar) = (astvariable, boolvariable)  
+      }
     }
    }
- 
 
    val assertions2 = solver.getAssertions().toSeq
    // Writing the assertions in the solver to a file for debugging if necessary
@@ -861,16 +873,35 @@ object Constraints {
    bw4.write(model2.toString)
    bw4.close()
 
-   // Getting the tracked variables to pass as assumptions to get Unsat Core
-   val assumptions = (trackScheduleVarsMap.keySet ++ trackAcHypVarsMap.keySet).toSeq
+   //Getting the tracked variables to pass as assumptions to get Unsat Core
+   val assumptions = (trackScheduleVarsMap.keySet ++ trackAcHypVarsMap.keySet ++ trackLsVarsMap.keySet).toSeq
 
-   solver.checkAssumptions(assumptions)
-   val unsatcore = solver.getUnsatCore()
-   println("This is Unsat core")
-   println(unsatcore.toSeq)
+   println("Checking Satisfiability with the assumptions") 
+   println(solver.checkAssumptions(assumptions : _*))
+   val unsatcore = solver.getUnsatCore().toSeq
+   println("Size of Unsat core")
+   println(unsatcore.size)
+
+   for(uns <- unsatcore)
+   {
+        if(trackScheduleVarsMap.contains(uns)) {
+          val temp = trackScheduleVarsMap(uns)
+          println(temp._1, temp._2)
+        }
+        else if(trackAcHypVarsMap.contains(uns)) {
+          val temp = trackAcHypVarsMap(uns)
+          println(temp._1, temp._2)
+        } 
+        else {
+          val temp = trackLsVarsMap(uns)
+          println(temp._1, temp._2)
+        }
+    }
    
+   //println(cleaned(unsatcore(0))(0)(0))
    println("--------------------")
    terminate("Terminated!")
+  
   }
 
   def verify(experiment: Experiment, solution: Solution): Option[CoarseSchedule] = {
