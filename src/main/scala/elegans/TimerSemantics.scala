@@ -79,12 +79,14 @@ object TimerSemantics extends Semantics {
           for (tl @ TimerLogic(_, triggerPred, _) <- n.logics) {
             val value = ctx.mkOr(triggers(t - 1)(tl), pred2ast(triggerPred, t))
             if(n.toString == "VPC_1_ls") {
-              val portvariable = n.P.toSeq(0)
-              lsVarsRef(t) = lsVarsRef(t) :+ portVars(t)(portvariable)
+              val port = n.P.toSeq(0)
+              val portvariable = portVars(t)(port)
+              lsVarsRef(t) = lsVarsRef(t) :+ portvariable
             }
             if(n.toString == "VPC_6_ls") {
-              val portvariable = n.P.toSeq(1)
-              lsVarsRef(t) = lsVarsRef(t) :+ portVars(t)(portvariable) 
+              val port = n.P.toSeq(1)
+              val portvariable = portVars(t)(port) 
+              lsVarsRef(t) = lsVarsRef(t) :+ portvariable
             }
             assertConstraint(ctx.mkIff(triggers(t)(tl), value))
           }

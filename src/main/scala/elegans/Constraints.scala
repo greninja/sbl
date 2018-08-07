@@ -8,6 +8,7 @@ object Constraints {
   import TimerSemantics._
   
   import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
+  import scala.collection.mutable.ListBuffer
   
 
   import java.io._
@@ -21,24 +22,31 @@ object Constraints {
   private var solver_ : Z3Solver = null
   private var portVars_   = MutableMap[Int, MutableMap[Port, Z3AST]]()
   private var channelVars = MutableMap[Int, MutableMap[(Cell, Cell), Z3AST]]()
-  
+
   //Maps to store non-deterministic variables from first run
   private var scheduleSolutionReference = MutableMap[Int, MutableMap[Int, Z3AST]]()
   private var AcHypValueReference = MutableMap[Int, MutableMap[Int, Seq[Z3AST]]]()
   
-  //Maps from tracking variables to non-deterministic variables plus their
-  private var trackScheduleVarsMap = MutableMap[Z3AST, (Z3AST, Z3AST)]()
+  //Maps from tracking variables to non-deterministic variables and their values
+  private var trackScheduleVarsMap = MutableMap[Z3AST, (Z3AST, Configuration)]()
   private var trackAcHypVarsMap = MutableMap[Z3AST, (Z3AST, Int)]()
-  private var trackLsVarsMap    = MutableMap[Z3AST, (Z3AST, Boolean)]()
+  private var trackLsVarsMap    = MutableMap[Z3AST, (Z3AST, Z3AST)]()
+
+  private var globalASTconstraints = Seq[Z3AST]()
+  private var interCellchannel = Seq[(Cell, Cell)]()
+
+  //To store all the variables causing UNSAT across all iterations of loop
+  var important_schedule = MutableSet[(String, Configuration)]()
+  var important_achyp    = MutableSet[(String, Int)]()
+  var important_ls       = MutableSet[(String, String)]()
+
+  private var important = MutableSet[Z3AST]()
 
   def ctx       = ctx_
   def solver    = solver_
   def portVars  = portVars_
 
   private var semantics = List(TimerSemantics, StatefulSemantics)
-
-  private var temp : Z3AST = null
-  private var fin : Z3AST = null
 
   val translationProfiler   = new Stopwatch("translation", true)
   val synthesisProfiler     = new Stopwatch("z3-synthesis", true)
@@ -54,14 +62,19 @@ object Constraints {
   private def rightEnabled()  = ctx.mkInt(1, intSort())
   private def leftEnabled()   = ctx.mkInt(2, intSort())
 
+  private def config2ast(c: Configuration) : Z3AST = c match {
+      case Disabled => disabled()
+      case EnabledRight => rightEnabled()
+      case EnabledLeft => leftEnabled()
+    }
+
   private var schedulesExperimentsCells = 
     MutableMap[CoarseSchedule, MutableMap[Experiment, List[Cell]]]()
 
   type History = MutableMap[Int, MutableMap[Port, Boolean]]
   type StringHistory = MutableMap[Int, MutableMap[String, Boolean]]
   type AcHypValuesMap = MutableMap[Int, MutableMap[Int, Seq[Int]]]
-  type LsValuesMap = MutableMap[Int, Seq[Boolean]]
-
+  type LsValuesMap = MutableMap[Int, Seq[Z3AST]]
 
   type Solution = Map[String, LogicSolution]
   case class UndefinedHole(id: String) extends Exception
@@ -120,19 +133,19 @@ object Constraints {
 
   private def restartZ3() {
     if (ctx != null) ctx.delete
-    ctx_ = new Z3Context("MODEL" -> true, "PROOF"->true)
+    ctx_ = new Z3Context("model" -> true, "proof"->true, "auto_config"->false)
     solver_ = ctx.mkSolver() 
-    fin = ctx.mkTrue
-    
+    //solver_2 = ctx.mkSolver()
+
     portVars_ = MutableMap[Int, MutableMap[Port, Z3AST]]()
     channelVars = MutableMap[Int, MutableMap[(Cell, Cell), Z3AST]]()
     
     scheduleSolutionReference = MutableMap[Int, MutableMap[Int, Z3AST]]()
     AcHypValueReference = MutableMap[Int, MutableMap[Int, Seq[Z3AST]]]()
     
-    trackScheduleVarsMap = MutableMap[Z3AST, (Z3AST, Z3AST)]()
+    trackScheduleVarsMap = MutableMap[Z3AST, (Z3AST, Configuration)]()
     trackAcHypVarsMap = MutableMap[Z3AST, (Z3AST, Int)]()
-    trackLsVarsMap   =  MutableMap[Z3AST, (Z3AST, Boolean)]()
+    trackLsVarsMap   =  MutableMap[Z3AST, (Z3AST, Z3AST)]()
     
     schedulesExperimentsCells = MutableMap[CoarseSchedule, MutableMap[Experiment, List[Cell]]]()
     semantics.map(_.restart())
@@ -183,33 +196,6 @@ object Constraints {
         }
       }
     }
-
-    /*
-    def exclusiveFate2(cell: Cell, fate: String) = {
-      val allOutcomes = cell.outcomeBundles.keySet
-      
-      cell.outcomeBundles.get(fate) match {
-        case None => logWarning("No bundle for fate " + fate + " in cell " + cell); ctx.mkTrue
-        case Some(bundleSet) => {
-          val valueEnabled = bundleSet.foldLeft(ctx.mkFalse) {
-            case (ast, bundle) => ctx.mkOr(ast, portVars(finalIndex)(bundle.ports(0)))
-          }
-          ctx.mkNot(valueEnabled)
-
-          //val otherOutcomes = allOutcomes - fate
-     
-          /*
-          val othersDisabled = otherOutcomes.foldLeft(ctx.mkTrue) {
-            case (ast, otherVal) => {
-              val otherValEnabled = cell.outcomeBundles(otherVal).foldLeft(ctx.mkFalse) {
-                case (innerAst, otherBundle) => ctx.mkOr(innerAst, portVars(finalIndex)(otherBundle.ports(0)))
-              }
-              ctx.mkAnd(ast, ctx.mkNot(otherValEnabled))*/
-
-            }
-          }
-          
-    }*/
       
     var setoffates = experiment.fates
     var fateofExperiment = Set(setoffates.head) 
@@ -252,7 +238,6 @@ object Constraints {
         for (node <- cell.N) {
           for (port <- node.P) {
             portVars(idx)(port) = ctx.mkFreshBoolConst(port.toString + "_" + idx)
-            
           }
         }
       }
@@ -264,7 +249,8 @@ object Constraints {
         scheduleSolutionReference(idx) = MutableMap()
 
         for ((c1, c2) <- aPrioriChannels) {
-          channelVars(idx)((c1, c2)) = ctx.mkFreshConst(c1.toString + "_" + c2.toString + "_channel_" + idx, intSort())
+          val channelvariable = ctx.mkFreshConst(c1.toString + "_" + c2.toString + "_channel_" + idx, intSort())
+          channelVars(idx)((c1, c2)) = channelvariable 
         }
 
         for (((c1, c2), j) <- asyncChannels zipWithIndex) {
@@ -384,12 +370,6 @@ object Constraints {
       }
     }
 
-    def config2ast(c: Configuration) : Z3AST = c match {
-      case Disabled => disabled()
-      case EnabledRight => rightEnabled()
-      case EnabledLeft => leftEnabled()
-    }
-
     def assertChannelValues(configurations: Map[Int, Map[(Cell, Cell), Configuration]]) {
       for ((t, stepConfigs) <- configurations) {
         for (((c1, c2), config) <- stepConfigs) {
@@ -404,7 +384,6 @@ object Constraints {
       val (alwaysRunningCells, aPrioriChannels, asyncCells) = createSystem(experiment)
    
       val allCells = alwaysRunningCells ::: asyncCells
-
 
       solution match {
         case Some(sol) => 
@@ -424,7 +403,7 @@ object Constraints {
       // disableInitialVars(allCells)
       assertInitialVars(allCells)
 
-      val asyncChannelBuffer = new scala.collection.mutable.ListBuffer[(Cell, Cell)]()
+      val asyncChannelBuffer = new ListBuffer[(Cell, Cell)]()
       asyncCells.reduceLeft[Cell] {
         case (left, right) =>
           asyncChannelBuffer append ((left, right))
@@ -432,6 +411,7 @@ object Constraints {
       }
       
       val interAsyncCellChannels = asyncChannelBuffer.toList
+      interCellchannel = interAsyncCellChannels
 
       //println("interAsyncCellChannels are : ")
       //println(interAsyncCellChannels)
@@ -439,7 +419,6 @@ object Constraints {
       // create channel variables in solver and restrict their range
       makeChannelVars(aPrioriChannels, interAsyncCellChannels, scheduleLength)
       assertChannelRanges()
-
 
       // Block 1
       for (t <- 0 until scheduleLength) {
@@ -462,16 +441,11 @@ object Constraints {
           }
       }
       
-      
       // schedule for always-running cells are asserted for both synthesis and verification
       val aPrioriChannelsMap = 
         (aPrioriChannels map (a => (a, EnabledRight))).toMap[(Cell, Cell), Configuration]
       val aPrioriConfigsPerStep = (0 until scheduleLength) map (t => (t, aPrioriChannelsMap))
-      //println("aPrioriConfigsPerStep")
-      //println(aPrioriConfigsPerStep)
       assertChannelValues(aPrioriConfigsPerStep.toMap)
-
-
 
       // if we have a concrete schedule, assert it. 
       concreteSchedule match {
@@ -480,22 +454,8 @@ object Constraints {
             val interAsyncCellChannelsMap = (interAsyncCellChannels zip macroStep).toMap
             (t, interAsyncCellChannelsMap)
           }
-          //assertChannelValues(mapsPerStep.toMap)
+          assertChannelValues(mapsPerStep.toMap)
           
-          // Tracking the schedule variables with boolean variables
-          for ((t, stepConfigs) <- mapsPerStep.toMap) {
-            var counter = 0
-            for (((c1, c2), config) <- stepConfigs) {
-                  counter += 1
-                  val astconfig = config2ast(config)
-                  val channelVar = channelVars(t)((c1, c2))
-                  val toAssert = ctx.mkEq(channelVar, astconfig)
-                  val tvar = ctx.mkBoolConst("trSch"+"_"+t+"_"+counter)
-                  trackScheduleVarsMap(tvar) = (channelVar, astconfig)
-                  assertConstraint(ctx.mkImplies(tvar, toAssert))
-                }
-          }  
-
           schedulesExperimentsCells(macroSteps) = schedulesExperimentsCells.getOrElse(macroSteps, MutableMap[Experiment, List[Cell]]())
           schedulesExperimentsCells(macroSteps)(experiment) = allCells
         }
@@ -543,7 +503,7 @@ object Constraints {
   private def recoverAcHypValues(m : Z3Model) : AcHypValuesMap = {
     def valueFromModel(ast : Z3AST) : Int = m.evalAs[Int](ast) match {
         case Some(i) => i
-        case None => terminate("No value for the given variable")
+        case None => terminate("No value for the given AC-HYP variable")
     }
 
     val varmap = MutableMap[Int, MutableMap[Int, Seq[Int]]]()
@@ -562,12 +522,12 @@ object Constraints {
 
   /* Recovering the non deterministic values of VPC_1_ls_left and VPC_6_ls_right */
   def recoverLsValues(m : Z3Model) : LsValuesMap = {
-    def valueFromModel(ast : Z3AST) : Boolean = m.evalAs[Boolean](ast) match {
+    def valueFromModel(ast : Z3AST) : Z3AST = m.eval(ast) match {
       case Some(b) => b
-      case None => terminate("No value for the given variable")
+      case None => terminate("No value given for the ls variable : " + ast.toString)
     }
 
-    val varmap = MutableMap[Int, Seq[Boolean]]()
+    val varmap = MutableMap[Int, Seq[Z3AST]]()
     for (t <- 1 to lsVarsRef.size) {
       val listofVars = lsVarsRef(t)
       val listvalues = for (i <- 0 until listofVars.size) yield {
@@ -577,37 +537,6 @@ object Constraints {
     }
     varmap
   }
-
-  def synthesizeHolesForScheduleSummarization(experiment : Experiment) : Option[Solution] = {
-
-    restartZ3()
-    assertExperiments(Settings.runLength, None, None, List(experiment), AssertFateDecision)
-    for (s <- semantics)
-      s.finalizeConstraints()
-    
-    solver.check match {
-      case (Some(true)) => {
-        //Statistics.solverReturned()
-        //synthesisProfiler.stop
-        val m = solver.getModel
-
-        var recovered = Map[String, LogicSolution]()
-        for (sem <- semantics)
-          recovered ++= sem.solution(m)
-
-        m.delete
-
-        Some(recovered)
-      }
-      case _ => {
-        //Statistics.solverReturned()
-        //synthesisProfiler.stop
-        None
-      }
-    }
-  }
-
-
   
   /** Synthesizes values for the hole values */
   def synthesize(
@@ -697,7 +626,7 @@ object Constraints {
       val experiments = inputs.filter(_._1 == sched).map(_._2).toList
       assertExperiments(sched.size, Some(sched), None, experiments, AssertFateDecision)
     }
-
+    
     for ((exp, sched) <- toSeeInSomeRun) {
       val schedString = if (sched.isDefined) "a specific" else "some"
       log("Expecting to see in " + schedString + " run:")
@@ -711,7 +640,7 @@ object Constraints {
       log("Expecting to avoid in " + schedString + " run:")
       log(exp)
       assertExperiments(Settings.runLength, sched, None, 
-        List(exp), AssertNegatedFateDecision)
+        List(exp), AssertNegatedFateDecision)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
     }
 
     for (s <- semantics)
@@ -752,9 +681,9 @@ object Constraints {
    * @return `None` if there are no counterexamples, a counterexample schedule
    * otherwise. 
    */
+  
   def synthesizeSchedule(experiment : Experiment, solution : Option[Solution])  = {
 
-   
    //Generating a solution as we do not want holes for our purpose (schedulesummarization)
    //val sol = synthesizeHolesForScheduleSummarization(experiment)
    //println("this is solution")
@@ -763,142 +692,208 @@ object Constraints {
    // This is to generate a schedule for a particular fate 
    restartZ3()
    assertExperiments(Settings.runLength, None, None, List(experiment), AssertFateDecision)
-   val assertions1 = solver.getAssertions().toSeq
+   var iterCount = 0
+
+   /*val assertions1 = solver.getAssertions().toSeq
    // Writing the assertions in the solver to a file for debugging if necessary
    val file = new File("Assertions1_10TimeSteps")
    val bw = new BufferedWriter(new FileWriter(file))
    bw.write(assertions1.toString)
    //bw2.write(cexSchedule.toString)
-   bw.close()
+   bw.close()*/
+
+   while(solver.check == Some(true)) {
+
+     // Increasing the counter to keep a track of iterations required to converge
+     iterCount += 1
+
+     //Getting the model
+     val model = solver.getModel
+
+     // Writing the output to a file
+     val file1 = new File("Model1_10TimeSteps")
+     val bw1 = new BufferedWriter(new FileWriter(file1))
+     bw1.write(model.toString)
+     bw1.close()
+
+     //Extracting the Ac-Hyp values
+     val AcHypExtractedValues = recoverAcHypValues(model)
    
-   //println("first check point")
-   //println(solver.check)
-   val model1 = solver.check match {
-      case Some(true) => {
-          //println("SAT")
-          solver.getModel
-      }
-      //case Some(false) => {
-      //    println("UNSAT")
-      //}
+     //Extracting the Ls values
+     val LsExtractedValues = recoverLsValues(model)
 
-   }
-   
-   // Writing the output to a file
-   val file1 = new File("Model1_10TimeSteps")
-   val bw1 = new BufferedWriter(new FileWriter(file1))
-   bw1.write(model1.toString)
-   bw1.close()
-   
-   //Extracting the Ac-Hyp values
-   val AcHypExtractedValues = recoverAcHypValues(model1)
- 
-   //Extracting the Ls values
-   val LsExtractedValues = recoverLsValues(model1)
+     // Extracting the schedule from the generated model
+     val cexSchedule = recoverSchedule(model)
 
-   // Extracting the schedule from the generated model
-   val cexSchedule = recoverSchedule(model1)
+     /* Asserting the experiment with negated fate and tracking :
+          (1) extracted schedule 
+          (2) extracted AC & Hyp input strengths
+          (3) extracted Ls values
+     */
+     
+     restartZ3()
+     assertExperiments(Settings.runLength, None, None, List(experiment), AssertNegatedFateDecision)
+     
+     // Tracking the schedule variables 
+     cexSchedule match {
+        case Some(macroSteps) => {
+          val mapsPerStep = for ((macroStep, t) <- macroSteps zipWithIndex) yield {
+            val interCellChannelsMap = (interCellchannel zip macroStep).toMap
+            (t, interCellChannelsMap)
+          }
+           
+          for ((t, stepConfigs) <- mapsPerStep.toMap) {
+              var counter = 0
+              for (((c1, c2), config) <- stepConfigs) {
+                  counter += 1
+                  val astconfig = config2ast(config)
+                  val channelVar = channelVars(t)((c1, c2))
+                  val toAssert = ctx.mkEq(channelVar, astconfig)
+                  val tvar = ctx.mkBoolConst("trSch"+"_"+t+"_"+counter)
+                  trackScheduleVarsMap(tvar) = (channelVar, config)
+                  assertConstraint(ctx.mkImplies(tvar, toAssert))
+              }
+            }  
+          }
+        case None => 
+     }
 
-   /* Asserting the experiment with :
-        (1) negated fate
-        (2) extracted schedule 
-        (3) extracted AC & Hyp input strengths
-        (4) extracted Ls values
-   */
-   restartZ3()
-   assertExperiments(Settings.runLength, Some(cexSchedule), None, List(experiment), AssertNegatedFateDecision)
+     // Track AC-Hyp values 
+     for (timestep <- 1 to AcHypValueReference.size) {
+      for (cellid <- 1 to nbAsyncCells) {
+          for (s <- 0 until 2) {
+            val astvariable = AcHypValueReference(timestep)(cellid)(s)
+            val intvariable = AcHypExtractedValues(timestep)(cellid)(s)
+            val toAssert = ctx.mkEq(astvariable, ctx.mkInt(intvariable, ctx.mkIntSort))
 
-   // Fix AC-Hyp values and track them here
-   for (timestep <- 1 to AcHypValueReference.size) {
-    for (cellid <- 1 to nbAsyncCells) {
-        for (s <- 0 until 2) {
-          val astvariable = AcHypValueReference(timestep)(cellid)(s)
-          val intvariable = AcHypExtractedValues(timestep)(cellid)(s)
-          val toAssert = ctx.mkEq(astvariable, ctx.mkInt(intvariable, ctx.mkIntSort))
-          //assertConstraint(toAssert)
+            val trvar = ctx.mkBoolConst("trAcHyp"+"_"+timestep+"_"+cellid+"_"+s)
+            assertConstraint(ctx.mkImplies(trvar, toAssert))
 
-          val trvar = ctx.mkBoolConst("trAcHyp"+"_"+timestep+"_"+cellid+"_"+s)
+            trackAcHypVarsMap(trvar) = (astvariable, intvariable)
+          }
+        }
+     }
+
+     // Track ls_left for VPC_1 and ls_right for VPC_6
+     for (timestep <- 1 to lsVarsRef.size) {
+      for (s <- 0 until 2) {
+        val astvariable = lsVarsRef(timestep)(s)
+        val boolvariable = LsExtractedValues(timestep)(s)
+        if (ctx.isEqAST(boolvariable, ctx.mkTrue)) {
+          val toAssert = ctx.mkEq(astvariable, ctx.mkTrue)
+
+          val trvar = ctx.mkBoolConst("trLs"+"_"+timestep+"_"+s)
+          assertConstraint(ctx.mkImplies(trvar, toAssert))  
+          trackLsVarsMap(trvar) = (astvariable, boolvariable)  
+        } else {
+          val toAssert = ctx.mkEq(astvariable, ctx.mkFalse)
+          
+          val trvar = ctx.mkBoolConst("trLs"+"_"+timestep+"_"+s)
           assertConstraint(ctx.mkImplies(trvar, toAssert))
-
-          trackAcHypVarsMap(trvar) = (astvariable, intvariable)
+          trackLsVarsMap(trvar) = (astvariable, boolvariable)  
         }
       }
-   }
+     }
 
-   // Fix ls_left for VPC_1 and ls_right for VPC_6
-   for (timestep <- 1 to lsVarsRef.size) {
-    for (s <- 0 until 2) {
-      val astvariable = lsVarsRef(timestep)(s)
-      val boolvariable = LsExtractedValues(timestep)(s)
-      if (boolvariable == true) {
-        val toAssert = ctx.mkEq(astvariable, ctx.mkTrue)
-        //assertConstraint(toAssert)
-        val trvar = ctx.mkBoolConst("trLs"+"_"+timestep+"_"+s)
-        assertConstraint(ctx.mkImplies(trvar, toAssert))  
-        trackLsVarsMap(trvar) = (astvariable, boolvariable)  
-      } else {
-        val toAssert = ctx.mkEq(astvariable, ctx.mkFalse)
-        //assertConstraint(toAssert)
-        val trvar = ctx.mkBoolConst("trLs"+"_"+timestep+"_"+s)
-        assertConstraint(ctx.mkImplies(trvar, toAssert))
-        trackLsVarsMap(trvar) = (astvariable, boolvariable)  
+     /*val assertions2 = solver.getAssertions().toSeq
+     // Writing the assertions in the solver to a file for debugging if necessary
+     val file2 = new File("Assertions2_10TimeSteps")
+     val bw2 = new BufferedWriter(new FileWriter(file2))
+     bw2.write(assertions2.toString)
+     //bw2.write(cexSchedule.toString)
+     bw2.close()*/
+
+     val model2 = solver.check match {
+        case Some(true) => {
+            //                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    println("SAT")
+            solver.getModel
+        }
+        case Some(false) => {
+            terminate("UNSAT problem")        
+        }
       }
-    }
-   }
-
-   val assertions2 = solver.getAssertions().toSeq
-   // Writing the assertions in the solver to a file for debugging if necessary
-   val file2 = new File("Assertions2_10TimeSteps")
-   val bw2 = new BufferedWriter(new FileWriter(file2))
-   bw2.write(assertions2.toString)
-   //bw2.write(cexSchedule.toString)
-   bw2.close()
-
-   //println("second check point")
-   println(solver.check)
-   val model2 = solver.check match {
-      case Some(true) => {
-          println("SAT")
-          solver.getModel
-      }
-      case Some(false) => {
-          println("UNSAT problem")
       
-      }
+     // Writing the generated model2 to a file
+     val file4 = new File("Model2_10TimeSteps")
+     val bw4 = new BufferedWriter(new FileWriter(file4))
+     bw4.write(model2.toString)
+     bw4.close()
+
+     //Getting the tracked variables to pass as assumptions to get Unsat Core
+     val assumptions = (trackScheduleVarsMap.keySet ++ trackAcHypVarsMap.keySet ++ trackLsVarsMap.keySet).toSeq
+
+     //println("Checking Satisfiability with the assumptions") 
+     solver.checkAssumptions(assumptions : _*)
+     val unsat_core = solver.getUnsatCore().toSeq
+     println("Size of Unsat core")
+     println(unsat_core.size)
+
+     /*println(trackScheduleVarsMap)
+     println(trackAcHypVarsMap)
+     println(trackLsVarsMap)*/
+
+     for(uns <- unsat_core)
+     {
+          if(trackScheduleVarsMap.contains(uns)) {
+            val temp = trackScheduleVarsMap(uns)
+            val str = temp._1.toString.split("!")(0)
+            val v = temp._2
+            important_schedule += ((str, v))
+          }
+          else if(trackAcHypVarsMap.contains(uns)) {
+            val temp = trackAcHypVarsMap(uns)
+            val str = temp._1.toString.split("!")(0)
+            val v = temp._2
+            important_achyp += ((str, v))
+          } 
+          else {
+            val temp = trackLsVarsMap(uns)
+            val str = temp._1.toString.split("!")(0)
+            val v = temp._2.toString
+            important_ls += ((str, v))
+            }
     }
+     
+    restartZ3()
+    assertExperiments(Settings.runLength, None, None, List(experiment), AssertFateDecision) 
     
-   // Writing the generated model2 to a file
-   val file4 = new File("Model2_10TimeSteps")
-   val bw4 = new BufferedWriter(new FileWriter(file4))
-   bw4.write(model2.toString)
-   bw4.close()
+    /*
+    for(imp <- important_schedule) {
+      val astvar = globalMap(imp._1)
+      val astval = config2ast(imp._2)
+      val toAssert = ctx.mkNot(ctx.mkEq(astvar, astval))
+      assertConstraint(toAssert)
+     }  
 
-   //Getting the tracked variables to pass as assumptions to get Unsat Core
-   val assumptions = (trackScheduleVarsMap.keySet ++ trackAcHypVarsMap.keySet ++ trackLsVarsMap.keySet).toSeq
+     for(imp <- important_achyp) {
+      val astvar = globalMap(imp._1)
+      val astval = ctx.mkInt(imp._2, ctx.mkIntSort)
+      val toAssert = ctx.mkNot(ctx.mkEq(astvar, astval))
+      assertConstraint(toAssert)
+     }  
+     
+     for(imp <- important_ls) {
+      val astvar = globalMap(imp._1)
+      val value = imp._2
+      if(value=="true") {
+        val toAssert = ctx.mkNot(ctx.mkEq(astvar, ctx.mkTrue))
+        assertConstraint(toAssert)
+      } else {
+        val toAssert = ctx.mkNot(ctx.mkEq(astvar, ctx.mkFalse))
+        assertConstraint(toAssert)
+      }*/  
+    } 
+   }
 
-   println("Checking Satisfiability with the assumptions") 
-   println(solver.checkAssumptions(assumptions : _*))
-   val unsatcore = solver.getUnsatCore().toSeq
-   println("Size of Unsat core")
-   println(unsatcore.size)
+   /*println("The important SCHEDULE variables are")
+   println(important_schedule)
+   println("The important AC and HYP variables are")
+   println(important_achyp)
+   println("The important LS variables are")
+   println(important_ls)*/
 
-   for(uns <- unsatcore)
-   {
-        if(trackScheduleVarsMap.contains(uns)) {
-          val temp = trackScheduleVarsMap(uns)
-          println(temp._1, temp._2)
-        }
-        else if(trackAcHypVarsMap.contains(uns)) {
-          val temp = trackAcHypVarsMap(uns)
-          println(temp._1, temp._2)
-        } 
-        else {
-          val temp = trackLsVarsMap(uns)
-          println(temp._1, temp._2)
-        }
-    }
-   
-   //println(cleaned(unsatcore(0))(0)(0))
+   println("Number of iterations it took to reach UNSATISFIABLE")
+   println(iterCount)
    println("--------------------")
    terminate("Terminated!")
   
@@ -947,9 +942,6 @@ object Constraints {
       solution: Option[Solution]): Option[(Seq[Cell], History)] = {
     try {
       restartZ3()
-
-      //println("this is the solution passed to assertexperiments in runsymbolic method")
-      //println(solution)
 
       assertExperiments(schedule.size, Some(schedule), solution, List(experiment), AssertNoFateDecision)
 

@@ -105,8 +105,6 @@ object StatefulSemantics extends Semantics {
   }
 
   def assertCons(c: Z3AST) = {
-    // println("ASSERTING")
-    // println(c)
     solver.assertCnstr(c)
   }
 
@@ -377,7 +375,7 @@ case class StatefulLogic() extends Logic {
   }
 
   /** Assert constraints for deciding output values associated with this logic
-   * */
+   **/
   def assertLogic(t: Int) : Option[Seq[Z3AST]] = {
     // make an int variable that represents each input's strength at this time
     val activatingIntVars = activatingSignals_ map (bundle2intVar(_, t))
@@ -403,10 +401,10 @@ case class StatefulLogic() extends Logic {
     // don't forget to assert value of output variable
     assertOutput(stateVar(t), t)
     
-    if (this.id == "let23#1")
+    if (this.id == "let23#1") 
         Some(activatingIntVars)
     else 
-        None 
+        None       
   }
 
   /** Returns a symbolic integer that is constrained to the input bundle value
@@ -414,7 +412,7 @@ case class StatefulLogic() extends Logic {
   private def bundle2intVar(input: PortBundle, t: Int): Z3AST = {
     val name = input.id + "_" + t.toString
     val fresh = ctx.mkFreshIntConst(name)
-
+  
     assertCons(relaxedBooleanIntEquivalence(input, t, fresh))
 
     fresh
