@@ -7,8 +7,9 @@ object Constraints {
   import Experiments._
   import TimerSemantics._
   
-  import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
+  import scala.collection.mutable.{Map => MutableMap, Set => MutableSet, SortedSet => MutableSortedSet}
   import scala.collection.mutable.ListBuffer
+  import scala.collection.immutable.ListMap
   
   import java.io._
 
@@ -25,6 +26,13 @@ object Constraints {
   //Maps to store non-deterministic variables from first run
   private var scheduleSolutionReference = MutableMap[Int, MutableMap[Int, Z3AST]]()
   private var AcHypValueReference = MutableMap[Int, MutableMap[Int, Seq[Z3AST]]]()
+
+  // Maps and sets to store nd variables
+  private var currentImpSched = MutableSet[(Z3AST, Z3AST)]()
+  private var currentImpAcHyp = MutableSet[(Z3AST, Z3AST)]()
+  private var currentImpLs    = MutableSet[(Z3AST, Z3AST)]()
+  private var current_forbidden = MutableSet[Z3AST]()
+  private var sortmap = MutableMap[Z3AST, String]()
   
   //Maps from tracking variables to non-deterministic variables and their values
   private var trackScheduleVarsMap = MutableMap[Z3AST, (Z3AST, Z3AST)]()
@@ -33,13 +41,12 @@ object Constraints {
 
   private var FateConstraint : Z3AST = null
   private var interCellchannel = Seq[(Cell, Cell)]()
+  private var globaluc : Z3AST = null
 
   //To store all the variables causing UNSAT across all iterations of loop
   var important_schedule = MutableSet[(Z3AST, Z3AST)]()
   var important_achyp    = MutableSet[(Z3AST, Z3AST)]()
   var important_ls       = MutableSet[(Z3AST, Z3AST)]()
-
-  private var important = MutableSet[Z3AST]()
 
   def ctx       = ctx_
   def solver    = solver_
@@ -694,34 +701,38 @@ object Constraints {
    // This is to generate a schedule for a particular fate 
    restartZ3()
    assertExperiments(Settings.runLength, None, None, List(experiment), AssertFateDecision)
-   var iterCount = 0
 
-   val assertions = solver.getAssertions().toSeq.toBuffer 
-   val len = assertions.length
-   assertions.remove(len-1)
+   var iterCount = 0
+   
+   val assertions1 = solver.getAssertions().toSeq.toBuffer 
+   val file1 = new File("Assertions1")
+   val bw1 = new BufferedWriter(new FileWriter(file1))
+   bw1.write(assertions1.toString)
+   bw1.close()
+
+   val len = assertions1.length
+   assertions1.remove(len-1)
+   //solver.push()
 
    // Maintaining two solvers
    val solver2 = ctx.mkSolver()
 
-   //Writing the assertions in the solver to a file for debugging if necessary
-   val file = new File("Assertions1_10TimeSteps")
-   val bw = new BufferedWriter(new FileWriter(file))
-   bw.write(assertions.toString)
-   bw.close()
-
    while(solver.check == Some(true)) {
-
+     
      // Increasing the counter to keep a track of iterations required to converge
      iterCount += 1
+     println("the itercount is " + iterCount)
 
      //Getting the model
+     //solver.check()
      val model = solver.getModel
+     //solver.pop()
 
-     // Writing the output to a file
-     val file1 = new File("Model1_10TimeSteps")
-     val bw1 = new BufferedWriter(new FileWriter(file1))
-     bw1.write(model.toString)
-     bw1.close()
+     //Writing the output to a file
+     val filem = new File("Model1")
+     val bwm = new BufferedWriter(new FileWriter(filem))
+     bwm.write(model.toString)
+     bwm.close()
 
      // Extracting the schedule from the generated model
      val cexSchedule = recoverSchedule(model)
@@ -731,7 +742,13 @@ object Constraints {
    
      //Extracting the Ls values
      val LsExtractedValues = recoverLsValues(model)
-
+      
+     val assertions2 = solver.getAssertions().toSeq
+     val file2 = new File("Assertions2")
+     val bw2 = new BufferedWriter(new FileWriter(file2))
+     bw2.write(assertions2.toString)
+     bw2.close()
+     
      /* Asserting the experiment with negated fate and tracking :
           (1) extracted schedule 
           (2) extracted AC & Hyp input strengths
@@ -740,11 +757,13 @@ object Constraints {
      
      resetTrackMaps()
      solver2.reset()
-     for (a <- assertions) {
+     for (a <- assertions1) {
       solver2.assertCnstr(a)
      }
      solver2.assertCnstr(ctx.mkNot(FateConstraint))
-     
+
+     //val assertns = solver2.getAssertions().toSeq.toBuffer
+
      // Tracking the schedule variables 
      val mapsPerStep = for ((macroStep, t) <- cexSchedule zipWithIndex) yield {
             val interCellChannelsMap = (interCellchannel zip macroStep).toMap
@@ -773,7 +792,8 @@ object Constraints {
             val toAssert = ctx.mkEq(astvar, astIntValue)
             val trvar = ctx.mkBoolConst("trAcHyp"+"_"+timestep+"_"+cellid+"_"+s)
             trackAcHypVarsMap(trvar) = (astvar, astIntValue)
-            solver2.assertCnstr(ctx.mkImplies(trvar, toAssert))           }
+            solver2.assertCnstr(ctx.mkImplies(trvar, toAssert))           
+          }
         }
      }
 
@@ -796,43 +816,40 @@ object Constraints {
        }
       }
 
-     val assertions2 = solver2.getAssertions().toSeq
-     // Writing the assertions in the solver to a file for debugging if necessary
-     val file2 = new File("Assertions2_10TimeSteps")
-     val bw2 = new BufferedWriter(new FileWriter(file2))
-     bw2.write(assertions2.toString)
-     //bw2.write(cexSchedule.toString)
-     bw2.close()
-
-     val model2 = solver2.check match {
-        case Some(true) => {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
-            solver2.getModel
-        }
-        case Some(false) => {
-            terminate("UNSAT problem")        
-        }
-      }
+     //val model2 = solver2.check match {
+     //   case Some(true) => {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+     //       solver2.getModel
+     //   }
+     //   case Some(false) => {
+     //       terminate("UNSAT problem")        
+     //   }
+     // }
       
-     // Writing the generated model2 to a file
-     val file4 = new File("Model2_10TimeSteps")
+     /*/ Writing the generated model2 to a file
+     val file5 = new File("Model2")
      val bw4 = new BufferedWriter(new FileWriter(file4))
      bw4.write(model2.toString)
-     bw4.close()
+     bw4.close()*/
 
      //Getting the tracked variables to pass as assumptions to get Unsat Core
      val assumptions = (trackScheduleVarsMap.keySet ++ trackAcHypVarsMap.keySet ++ trackLsVarsMap.keySet).toSeq
-
-     println("Checking Satisfiability with the assumptions") 
-     println(solver2.checkAssumptions(assumptions : _*))
+     //println("Checking Satisfiability with the assumptions") 
+     solver2.checkAssumptions(assumptions : _*)
      val unsat_core = solver2.getUnsatCore().toSeq
-     println("Size of assumptions:")
-     println(assumptions.size)
+
+     /*if (prev_unsatcore == unsat_core) 
+          println("unsat cores are same")
+     else
+          println("unsat cores are not same")
+     prev_unsatcore = unsat_core*/
+
      println("Size of Unsat core")
      println(unsat_core.size)
 
-     var currentImpSched = MutableSet[(Z3AST, Z3AST)]()
-     var currentImpAcHyp = MutableSet[(Z3AST, Z3AST)]()
-     var currentImpLs    = MutableSet[(Z3AST, Z3AST)]()
+     currentImpSched.clear
+     currentImpAcHyp.clear
+     currentImpLs.clear
+     current_forbidden.clear
 
      for(uns <- unsat_core)
      {
@@ -860,38 +877,65 @@ object Constraints {
     important_achyp ++= currentImpAcHyp
     important_ls ++= currentImpLs
 
-    val merged_important = currentImpSched ++ currentImpLs ++ currentImpAcHyp
+    val merged_important = currentImpSched ++ currentImpAcHyp ++ currentImpLs
 
-    // Asserting the negation of previous found values
+    // Collecting all the current values of ND variables from UNSAT CORE
     for(imp <- merged_important) {
-        val toAssert = ctx.mkNot(ctx.mkEq(imp._1, imp._2))
-        assertConstraint(toAssert)
+        current_forbidden += ctx.mkEq(imp._1, imp._2)
     }  
-     /*val assertions2 = solver.getAssertions().toSeq
-     // Writing the assertions in the solver to a file for debugging if necessary
-     val file2 = new File("Assertions2_10TimeSteps")
-     val bw2 = new BufferedWriter(new FileWriter(file2))
-     bw2.write(assertions2.toString)
-     //bw2.write(cexSchedule.toString)
-     bw2.close()*/
-  } 
-   
-   println("The important SCHEDULE variables are")
-   println(important_schedule)
-   println("and the size of it")
-   println(important_schedule.size)
-   println()
-   println("The important AC and HYP variables are")
-   println(important_achyp)
-   println()
-   println("The important LS variables are")
-   println(important_ls)
-   println()
+    
+    //val solver3 = ctx.mkSolver()
+    //for(a <- assertns){
+    //  solver3.assertCnstr(a)
+    //}
+    
+    // finding minimal unsat core
+    val toseq = current_forbidden.toSeq
+    for(a <- toseq) {
+      solver2.push()
+      current_forbidden.remove(a)
+      solver2.assertCnstr(ctx.mkAnd(current_forbidden.toSeq : _*))
+      if(solver2.check == Some(true)) {
+        current_forbidden += a
+      }
+      solver2.pop()
+    }
+        
+    println("Size of minimal unsat core is:")
+    println(current_forbidden.size)
+    
+    sortmap.clear
+    for (a <- current_forbidden) {
+      sortmap(a) = a.toString
+    }
+    val sortedmuc = ListMap(sortmap.toSeq.sortBy(_._2):_*).keySet
 
-   println("Number of iterations it took to reach UNSATISFIABLE")
-   println(iterCount)
-   println("-------------------")
-   
+    //if(iterCount == 1) {
+    //  globaluc = ctx.mkOr(current_forbidden.toSeq : _*)
+    //}
+    //else {
+    //  globaluc = ctx.mkAnd(globaluc, ctx.mkOr(current_forbidden.toSeq : _*))
+    //}
+
+    //solver.push()
+    
+    assertConstraint(ctx.mkNot(ctx.mkAnd(sortedmuc.toSeq : _*)))
+    val assertions3 = solver.getAssertions().toSeq.toBuffer 
+    val file3 = new File("Assertions3")
+    val bw3 = new BufferedWriter(new FileWriter(file3))
+    bw3.write(assertions3.toString)
+    bw3.close()
+
+    if(iterCount==50){
+      terminate("------")
+    }
+    //println("Size of important schedule, achyp and ls variables is:")
+    //println(important_schedule.size, important_achyp.size, important_ls.size)
+  } 
+
+  println("Number of iterations it took to reach UNSAT")
+  println(iterCount)
+  terminate("-----")   
   }
 
   def verify(experiment: Experiment, solution: Solution): Option[CoarseSchedule] = {
