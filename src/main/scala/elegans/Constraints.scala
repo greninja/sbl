@@ -888,11 +888,6 @@ object Constraints {
         tempmap(equalvar) = imp._1
     }  
     
-    //val solver3 = ctx.mkSolver()
-    //for(a <- assertns){
-    //  solver3.assertCnstr(a)
-    //}
-    
     // finding minimal unsat core
     val toseq = current_forbidden.toSeq
     for(a <- toseq) {
@@ -905,15 +900,17 @@ object Constraints {
       solver2.pop()
     }
         
-    println("Size of minimal unsat core is:")
-    println(current_forbidden.size)
+    //println("Size of minimal unsat core is:")
+    //println(current_forbidden.size)
     
-    for(equalvar <- current_forbidden) {
-      val t = tempmap(equalvar)
+    for(atom <- current_forbidden) {
+      val t = tempmap(atom)
       impmap(t) = impmap.getOrElse(t, MutableSet[Z3AST]())
-      impmap(t) += equalvar 
+      impmap(t) += atom 
     }
-
+    println(impmap)
+    // TODO : try not passing all the vars
+    
     var finaland = Seq[Z3AST]()
     for (a <- impmap.keySet) {
       finaland :+= ctx.mkOr(impmap(a).toSeq : _*)
@@ -932,6 +929,9 @@ object Constraints {
     bw3.write(assertions3.toString)
     bw3.close()
 
+    if(iterCount==20){
+      terminate("0000000000000")
+    }
   } 
 
   //println("Size of important schedule, achyp and ls variables is:")
