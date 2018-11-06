@@ -33,6 +33,7 @@ object Constraints {
   private var currentImpLs    = MutableSet[(Z3AST, Z3AST)]()
   private var current_forbidden = MutableSet[Z3AST]()
   private var sortmap = MutableMap[Z3AST, String]()
+  private var impmap = MutableMap[Z3AST, MutableSet[Z3AST]]()
   
   //Maps from tracking variables to non-deterministic variables and their values
   private var trackScheduleVarsMap = MutableMap[Z3AST, (Z3AST, Z3AST)]()
@@ -878,10 +879,13 @@ object Constraints {
     important_ls ++= currentImpLs
 
     val merged_important = currentImpSched ++ currentImpAcHyp ++ currentImpLs
+    var tempmap = MutableMap[Z3AST, Z3AST]()
 
     // Collecting all the current values of non deterministic variables from UNSAT CORE
     for(imp <- merged_important) {
-        current_forbidden += ctx.mkEq(imp._1, imp._2)
+        val equalvar = ctx.mkEq(imp._1, imp._2)
+        current_forbidden += equalvar
+        tempmap(equalvar) = imp._1
     }  
     
     //val solver3 = ctx.mkSolver()
@@ -904,35 +908,35 @@ object Constraints {
     println("Size of minimal unsat core is:")
     println(current_forbidden.size)
     
-    sortmap.clear
-    for (a <- current_forbidden) {
-      sortmap(a) = a.toString
+    for(equalvar <- current_forbidden) {
+      val t = tempmap(equalvar)
+      impmap(t) = impmap.getOrElse(t, MutableSet[Z3AST]())
+      impmap(t) += equalvar 
     }
-    val sortedmuc = ListMap(sortmap.toSeq.sortBy(_._2):_*).keySet
 
-    //if(iterCount == 1) {
-    //  globaluc = ctx.mkOr(current_forbidden.toSeq : _*)
-    //}
-    //else {
-    //  globaluc = ctx.mkAnd(globaluc, ctx.mkOr(current_forbidden.toSeq : _*))
-    //}
+    var finaland = Seq[Z3AST]()
+    for (a <- impmap.keySet) {
+      finaland :+= ctx.mkOr(impmap(a).toSeq : _*)
+    }
 
-    //solver.push()
+    //sortmap.clear
+    //for (a <- current_forbidden) {
+    //  sortmap(a) = a.toString
+    //}
+    //val sortedmuc = ListMap(sortmap.toSeq.sortBy(_._2):_*).keySet
     
-    assertConstraint(ctx.mkNot(ctx.mkAnd(sortedmuc.toSeq : _*)))
+    assertConstraint(ctx.mkNot(ctx.mkAnd(finaland : _*)))
     val assertions3 = solver.getAssertions().toSeq.toBuffer 
     val file3 = new File("Assertions3")
     val bw3 = new BufferedWriter(new FileWriter(file3))
     bw3.write(assertions3.toString)
     bw3.close()
 
-    if(iterCount==500){
-      terminate("------")
-    }
-    //println("Size of important schedule, achyp and ls variables is:")
-    //println(important_schedule.size, important_achyp.size, important_ls.size)
   } 
 
+  //println("Size of important schedule, achyp and ls variables is:")
+  //println(important_schedule.size, important_achyp.size, important_ls.size)
+  
   println("Number of iterations it took to reach UNSAT")
   println(iterCount)
   terminate("-----")   
