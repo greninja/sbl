@@ -12,9 +12,9 @@ object Model {
   val nbLet23States = 3
   val nbLstStates   = 3
 
-  class Let23 extends Node("let23") {
-    val ac          = input("ac")("low", "med", "high")(Constant)
-    val hyp         = input("hyp")("on")(Constant)
+  class Let23(cellname: String) extends Node("let23") {
+    val ac          = input("ac"+"_"+cellname)("low", "med", "high")(Constant)
+    val hyp         = input("hyp"+"_"+cellname)("on")(Constant)
     val out         = output("out")("on")
 
     val stateful = logic(new StatefulLogic {
@@ -438,7 +438,7 @@ object Model {
   }
 
   class VPC(name: String, experiment: Experiment) extends Cell(name) {
-    val let23       = node(new Let23())
+    val let23       = node(new Let23(name))
     val sem5        = node(new Sem5())
     val let60       = node(new Let60())
     val mpk1        = node(new Mpk1())

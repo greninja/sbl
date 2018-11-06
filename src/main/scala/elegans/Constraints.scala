@@ -879,7 +879,7 @@ object Constraints {
 
     val merged_important = currentImpSched ++ currentImpAcHyp ++ currentImpLs
 
-    // Collecting all the current values of ND variables from UNSAT CORE
+    // Collecting all the current values of non deterministic variables from UNSAT CORE
     for(imp <- merged_important) {
         current_forbidden += ctx.mkEq(imp._1, imp._2)
     }  
@@ -926,7 +926,7 @@ object Constraints {
     bw3.write(assertions3.toString)
     bw3.close()
 
-    if(iterCount==50){
+    if(iterCount==500){
       terminate("------")
     }
     //println("Size of important schedule, achyp and ls variables is:")
