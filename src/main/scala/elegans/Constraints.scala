@@ -34,6 +34,7 @@ object Constraints {
   private var current_forbidden = MutableSet[Z3AST]()
   private var sortmap = MutableMap[Z3AST, String]()
   private var impmap = MutableMap[Z3AST, MutableSet[Z3AST]]()
+  private var localset = MutableSet[Z3AST]()
   
   //Maps from tracking variables to non-deterministic variables and their values
   private var trackScheduleVarsMap = MutableMap[Z3AST, (Z3AST, Z3AST)]()
@@ -152,6 +153,7 @@ object Constraints {
     important_schedule = MutableSet[(Z3AST, Z3AST)]()
     important_achyp    = MutableSet[(Z3AST, Z3AST)]()
     important_ls       = MutableSet[(Z3AST, Z3AST)]()
+    impmap             = MutableMap[Z3AST, MutableSet[Z3AST]]()
   }
 
   private def resetTrackMaps() {
@@ -722,7 +724,7 @@ object Constraints {
      
      // Increasing the counter to keep a track of iterations required to converge
      iterCount += 1
-     println("the itercount is " + iterCount)
+     //println("the itercount is " + iterCount)
 
      //Getting the model
      //solver.check()
@@ -844,8 +846,8 @@ object Constraints {
           println("unsat cores are not same")
      prev_unsatcore = unsat_core*/
 
-     println("Size of Unsat core")
-     println(unsat_core.size)
+     //println("Size of Unsat core")
+     //println(unsat_core.size)
 
      currentImpSched.clear
      currentImpAcHyp.clear
@@ -900,21 +902,22 @@ object Constraints {
       solver2.pop()
     }
         
-    //println("Size of minimal unsat core is:")
-    //println(current_forbidden.size)
-    
-    for(atom <- current_forbidden) {
-      val t = tempmap(atom)
-      impmap(t) = impmap.getOrElse(t, MutableSet[Z3AST]())
-      impmap(t) += atom 
-    }
-    println(impmap)
-    // TODO : try not passing all the vars
+    //println("minimal unsat core")
+    //println(current_forbidden)
     
     var finaland = Seq[Z3AST]()
-    for (a <- impmap.keySet) {
-      finaland :+= ctx.mkOr(impmap(a).toSeq : _*)
-    }
+    for(atom <- current_forbidden) {
+      val t = tempmap(atom)
+      if(impmap.contains(t)==false){
+        impmap(t) = MutableSet[Z3AST]()
+      }
+      impmap(t) += atom
+      finaland :+= ctx.mkOr(impmap(t).toSeq : _*) 
+    }    
+    
+    //for (a <- impmap.keySet) {
+    //  finaland :+= ctx.mkOr(impmap(a).toSeq : _*)
+    //}
 
     //sortmap.clear
     //for (a <- current_forbidden) {
@@ -922,24 +925,40 @@ object Constraints {
     //}
     //val sortedmuc = ListMap(sortmap.toSeq.sortBy(_._2):_*).keySet
     
+    //for(a <-current_forbidden) {
+    //  localset += a
+    //}
+    //println("size of localset")
+    //println(localset.size)
+
     assertConstraint(ctx.mkNot(ctx.mkAnd(finaland : _*)))
     val assertions3 = solver.getAssertions().toSeq.toBuffer 
     val file3 = new File("Assertions3")
     val bw3 = new BufferedWriter(new FileWriter(file3))
     bw3.write(assertions3.toString)
     bw3.close()
-
-    if(iterCount==20){
-      terminate("0000000000000")
-    }
   } 
 
-  //println("Size of important schedule, achyp and ls variables is:")
-  //println(important_schedule.size, important_achyp.size, important_ls.size)
-  
+  //var sanityvars = Seq[Z3AST]()
+  //for (a <- impmap.keySet) {
+  //   sanityvars :+= ctx.mkOr(impmap(a).toSeq : _*)
+  //}
+  //println("Sanity check: (should be UNSAT)")
+  //solver2.assertCnstr(ctx.mkAnd(sanityvars : _*))
+  //println(solver2.check)
+
+  println("Size of important schedule, achyp and ls variables is:")
+  println(important_schedule.size, important_achyp.size, important_ls.size)
+
+  println("Important schedule variables")
+  println(important_schedule)
+  println("Important achyp variables")
+  println(important_achyp)
+  println("Important ls variables")
+  println(important_ls)
+
   println("Number of iterations it took to reach UNSAT")
-  println(iterCount)
-  terminate("-----")   
+  println(iterCount)   
   }
 
   def verify(experiment: Experiment, solution: Solution): Option[CoarseSchedule] = {
