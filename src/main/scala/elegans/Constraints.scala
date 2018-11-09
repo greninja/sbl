@@ -35,6 +35,7 @@ object Constraints {
   private var sortmap = MutableMap[Z3AST, String]()
   private var impmap = MutableMap[Z3AST, MutableSet[Z3AST]]()
   private var localset = MutableSet[Z3AST]()
+  private var sanityvars = Seq[Z3AST]()
   
   //Maps from tracking variables to non-deterministic variables and their values
   private var trackScheduleVarsMap = MutableMap[Z3AST, (Z3AST, Z3AST)]()
@@ -154,6 +155,7 @@ object Constraints {
     important_achyp    = MutableSet[(Z3AST, Z3AST)]()
     important_ls       = MutableSet[(Z3AST, Z3AST)]()
     impmap             = MutableMap[Z3AST, MutableSet[Z3AST]]()
+    sanityvars         = Seq[Z3AST]()
   }
 
   private def resetTrackMaps() {
@@ -765,8 +767,6 @@ object Constraints {
      }
      solver2.assertCnstr(ctx.mkNot(FateConstraint))
 
-     //val assertns = solver2.getAssertions().toSeq.toBuffer
-
      // Tracking the schedule variables 
      val mapsPerStep = for ((macroStep, t) <- cexSchedule zipWithIndex) yield {
             val interCellChannelsMap = (interCellchannel zip macroStep).toMap
@@ -901,7 +901,9 @@ object Constraints {
       }
       solver2.pop()
     }
-        
+
+    sanityvars :+= ctx.mkAnd(current_forbidden.toSeq : _*)
+
     //println("minimal unsat core")
     //println(current_forbidden)
     
@@ -938,14 +940,22 @@ object Constraints {
     bw3.write(assertions3.toString)
     bw3.close()
   } 
+  
+  solver2.reset()
+  for (a <- assertions1) {
+    solver2.assertCnstr(a)
+  }
+  solver2.assertCnstr(ctx.mkNot(FateConstraint))
+  
+  solver2.assertCnstr(ctx.mkOr(sanityvars : _*))
+  println("Sanity check: (should be UNSAT)")
+  println(solver2.check)
 
-  //var sanityvars = Seq[Z3AST]()
-  //for (a <- impmap.keySet) {
-  //   sanityvars :+= ctx.mkOr(impmap(a).toSeq : _*)
-  //}
-  //println("Sanity check: (should be UNSAT)")
-  //solver2.assertCnstr(ctx.mkAnd(sanityvars : _*))
-  //println(solver2.check)
+  val assertions4 = solver2.getAssertions().toSeq.toBuffer 
+  val file4 = new File("Assertions4")
+  val bw4 = new BufferedWriter(new FileWriter(file4))
+  bw4.write(assertions4.toString)
+  bw4.close()
 
   println("Size of important schedule, achyp and ls variables is:")
   println(important_schedule.size, important_achyp.size, important_ls.size)
