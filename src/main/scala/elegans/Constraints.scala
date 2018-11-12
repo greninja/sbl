@@ -726,7 +726,7 @@ object Constraints {
      
      // Increasing the counter to keep a track of iterations required to converge
      iterCount += 1
-     //println("the itercount is " + iterCount)
+     println("the itercount is " + iterCount)
 
      //Getting the model
      //solver.check()
@@ -902,10 +902,10 @@ object Constraints {
       solver2.pop()
     }
 
-    sanityvars :+= ctx.mkAnd(current_forbidden.toSeq : _*)
+    //sanityvars :+= ctx.mkAnd(current_forbidden.toSeq : _*)
 
-    //println("minimal unsat core")
-    //println(current_forbidden)
+    println("minimal unsat core")
+    println(current_forbidden.size)
     
     var finaland = Seq[Z3AST]()
     for(atom <- current_forbidden) {
@@ -933,6 +933,7 @@ object Constraints {
     //println("size of localset")
     //println(localset.size)
 
+    sanityvars :+= ctx.mkAnd(finaland : _*)
     assertConstraint(ctx.mkNot(ctx.mkAnd(finaland : _*)))
     val assertions3 = solver.getAssertions().toSeq.toBuffer 
     val file3 = new File("Assertions3")
@@ -946,7 +947,7 @@ object Constraints {
     solver2.assertCnstr(a)
   }
   solver2.assertCnstr(ctx.mkNot(FateConstraint))
-  
+
   solver2.assertCnstr(ctx.mkOr(sanityvars : _*))
   println("Sanity check: (should be UNSAT)")
   println(solver2.check)
@@ -957,18 +958,18 @@ object Constraints {
   bw4.write(assertions4.toString)
   bw4.close()
 
-  println("Size of important schedule, achyp and ls variables is:")
-  println(important_schedule.size, important_achyp.size, important_ls.size)
-
-  println("Important schedule variables")
-  println(important_schedule)
-  println("Important achyp variables")
-  println(important_achyp)
-  println("Important ls variables")
-  println(important_ls)
+  //println("Size of important schedule, achyp and ls variables is:")
+  //println(important_schedule.size, important_achyp.size, important_ls.size)
+  //println("Important schedule variables")
+  //println(important_schedule)
+  //println("Important achyp variables")
+  //println(important_achyp)
+  //println("Important ls variables")
+  //println(important_ls)
 
   println("Number of iterations it took to reach UNSAT")
   println(iterCount)   
+  terminate("====")
   }
 
   def verify(experiment: Experiment, solution: Solution): Option[CoarseSchedule] = {

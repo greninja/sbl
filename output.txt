@@ -1,0 +1,38 @@
+[0m[[0minfo[0m] [0mLoading global plugins from /home/shadab/.sbt/0.13/plugins[0m
+[0m[[0minfo[0m] [0mLoading project definition from /home/shadab/PROJECTDIR/sbl/project[0m
+[0m[[0minfo[0m] [0mSet current project to sbl (in build file:/home/shadab/PROJECTDIR/sbl/)[0m
+[0m[[0minfo[0m] [0mCompiling 1 Scala source to /home/shadab/PROJECTDIR/sbl/target/scala-2.10/classes...[0m
+[0m[[33mwarn[0m] [0mthere were 9 deprecation warning(s); re-run with -deprecation for details[0m
+[0m[[33mwarn[0m] [0mthere were 3 feature warning(s); re-run with -feature for details[0m
+[0m[[33mwarn[0m] [0mtwo warnings found[0m
+[0m[[0minfo[0m] [0mRunning elegans.Main --summarizeSchedules[0m
+Fate is :
+Set(Vector(1, 1, 2, 1, 2, 1))
+the itercount is 1
+minimal unsat core
+12
+the itercount is 2
+minimal unsat core
+12
+the itercount is 3
+minimal unsat core
+12
+the itercount is 4
+minimal unsat core
+12
+the itercount is 5
+minimal unsat core
+12
+the itercount is 6
+minimal unsat core
+12
+the itercount is 7
+minimal unsat core
+12
+the itercount is 8
+minimal unsat core
+12
+the itercount is 9
+minimal unsat core
+12
+the itercount is 10
