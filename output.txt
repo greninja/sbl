@@ -8,31 +8,13 @@
 [0m[[0minfo[0m] [0mRunning elegans.Main --summarizeSchedules[0m
 Fate is :
 Set(Vector(1, 1, 2, 1, 2, 1))
-the itercount is 1
-minimal unsat core
-12
-the itercount is 2
-minimal unsat core
-12
-the itercount is 3
-minimal unsat core
-12
-the itercount is 4
-minimal unsat core
-12
-the itercount is 5
-minimal unsat core
-12
-the itercount is 6
-minimal unsat core
-12
-the itercount is 7
-minimal unsat core
-12
-the itercount is 8
-minimal unsat core
-12
-the itercount is 9
-minimal unsat core
-12
-the itercount is 10
+Sanity check: (should be UNSAT)
+Some(true)
+Number of iterations it took to reach UNSAT
+112
+[31m[ERROR][0m ====
+java.lang.RuntimeException: Nonzero exit code returned from runner: 1
+	at scala.sys.package$.error(package.scala:27)
+[0m[[31mtrace[0m] [0mStack trace suppressed: run [34mlast compile:run[0m for the full output.[0m
+[0m[[31merror[0m] [0m(compile:[31mrun[0m) Nonzero exit code returned from runner: 1[0m
+[0m[[31merror[0m] [0mTotal time: 743 s, completed Nov 22, 2018 6:09:39 PM[0m

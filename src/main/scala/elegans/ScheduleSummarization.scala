@@ -33,5 +33,4 @@ object ScheduleSummarization {
 			summarizeSchedule(e, solution)
 			}
 		}
-
 }

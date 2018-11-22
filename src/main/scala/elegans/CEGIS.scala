@@ -34,6 +34,7 @@ object CEGIS {
           var experimentWithAllOutcomes = experiment.copy(fates = allFates)
           Constraints.verify(experimentWithAllOutcomes, solution) match {
             case Some(cexSched) => {
+              
               Settings.runningMethod(experiment, cexSched, Some(solution)) match {
                 case Some((newCells, newTrace)) => {
                   val toAdd = decidedFates(newCells, newTrace)

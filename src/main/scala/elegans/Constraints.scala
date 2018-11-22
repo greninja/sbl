@@ -5,7 +5,7 @@ object Constraints {
   import Model._
   import Schedules._
   import Experiments._
-  import TimerSemantics._
+  import TimerSemantics._ 
   
   import scala.collection.mutable.{Map => MutableMap, Set => MutableSet, SortedSet => MutableSortedSet}
   import scala.collection.mutable.ListBuffer
@@ -159,9 +159,9 @@ object Constraints {
   }
 
   private def resetTrackMaps() {
-    trackScheduleVarsMap = MutableMap[Z3AST, (Z3AST, Z3AST)]()
-    trackAcHypVarsMap = MutableMap[Z3AST, (Z3AST, Z3AST)]()
-    trackLsVarsMap   =  MutableMap[Z3AST, (Z3AST, Z3AST)]()
+    trackScheduleVarsMap.clear 
+    trackAcHypVarsMap.clear    
+    trackLsVarsMap.clear       
   }
 
   /*private def disableInitialVars(cells: List[Cell]) {
@@ -714,24 +714,57 @@ object Constraints {
    val bw1 = new BufferedWriter(new FileWriter(file1))
    bw1.write(assertions1.toString)
    bw1.close()
-
+   
+   /*
+   while(solver.check == Some(true)) {
+    iterCount += 1
+    println("the itercount is " + iterCount)
+    val model = solver.getModel
+    val cexSchedule = recoverSchedule(model)
+    
+    val mapsPerStep = for ((macroStep, t) <- cexSchedule zipWithIndex) yield {
+    val interCellChannelsMap = (interCellchannel zip macroStep).toMap
+            (t, interCellChannelsMap)
+         }
+    
+    var finaland = Seq[Z3AST]() 
+    for ((t, stepConfigs) <- mapsPerStep.toMap) {
+      var counter = 0
+      for (((c1, c2), config) <- stepConfigs) {
+          counter += 1
+          val channelVar = channelVars(t)((c1, c2))
+          val astconfig = config2ast(config)
+          val toAssert = ctx.mkEq(channelVar, astconfig)
+          finaland :+= toAssert
+          //val trvar = ctx.mkBoolConst("trSch"+"_"+t+"_"+counter)
+          //trackScheduleVarsMap(trvar) = (channelVar, astconfig)
+          //solver2.assertCnstr(ctx.mkImplies(trvar, toAssert))
+      }
+     }  
+    }
+    println("itercount:")
+    println(iterCount)
+    terminate("----")
+   }*/
+   
    val len = assertions1.length
    assertions1.remove(len-1)
-   //solver.push()
 
    // Maintaining two solvers
    val solver2 = ctx.mkSolver()
+   for (a <- assertions1) {
+      solver2.assertCnstr(a)
+    }
+    solver2.assertCnstr(ctx.mkNot(FateConstraint))
 
    while(solver.check == Some(true)) {
      
      // Increasing the counter to keep a track of iterations required to converge
      iterCount += 1
-     println("the itercount is " + iterCount)
+     //println("the itercount is " + iterCount)
 
      //Getting the model
-     //solver.check()
      val model = solver.getModel
-     //solver.pop()
 
      //Writing the output to a file
      val filem = new File("Model1")
@@ -747,7 +780,17 @@ object Constraints {
    
      //Extracting the Ls values
      val LsExtractedValues = recoverLsValues(model)
-      
+     
+     //Settings.runningMethod(experiment, cexSchedule, solution) match {
+     //  case Some((newCells, newTrace)) => {
+     //    val faterecovered = decidedFates(newCells, newTrace)
+     //    println("fate recovered")
+     //    println(faterecovered)
+     //  }
+     //  case None => {
+     //  }
+     //}
+
      val assertions2 = solver.getAssertions().toSeq
      val file2 = new File("Assertions2")
      val bw2 = new BufferedWriter(new FileWriter(file2))
@@ -760,12 +803,8 @@ object Constraints {
           (3) extracted Ls values
      */
      
+     // Resets all the track maps
      resetTrackMaps()
-     solver2.reset()
-     for (a <- assertions1) {
-      solver2.assertCnstr(a)
-     }
-     solver2.assertCnstr(ctx.mkNot(FateConstraint))
 
      // Tracking the schedule variables 
      val mapsPerStep = for ((macroStep, t) <- cexSchedule zipWithIndex) yield {
@@ -890,6 +929,12 @@ object Constraints {
         tempmap(equalvar) = imp._1
     }  
     
+    solver2.reset()
+    for (a <- assertions1) {
+     solver2.assertCnstr(a)
+    }
+    solver2.assertCnstr(ctx.mkNot(FateConstraint))
+
     // finding minimal unsat core
     val toseq = current_forbidden.toSeq
     for(a <- toseq) {
@@ -903,20 +948,37 @@ object Constraints {
     }
 
     //sanityvars :+= ctx.mkAnd(current_forbidden.toSeq : _*)
-
-    println("minimal unsat core")
-    println(current_forbidden.size)
+    //println("minimal unsat core")
+    //println(current_forbidden.size)
     
     var finaland = Seq[Z3AST]()
+    //var summary = Seq[Z3AST]()
     for(atom <- current_forbidden) {
       val t = tempmap(atom)
       if(impmap.contains(t)==false){
         impmap(t) = MutableSet[Z3AST]()
       }
       impmap(t) += atom
-      finaland :+= ctx.mkOr(impmap(t).toSeq : _*) 
-    }    
-    
+      finaland  :+= ctx.mkOr(impmap(t).toSeq : _*)
+    } 
+
+    //sanityvars :+= ctx.mkAnd(finaland : _*)
+    //solver2.push()
+
+    //if(t.toString.startsWith("ac")) {
+    //  if(impmap(t).size != 4) {
+    //    summary :+= ctx.mkOr(impmap(t).toSeq : _*)
+    //  }
+    //} else if(t.toString.startsWith("VPC")) {
+    //  if(impmap(t).size != 3) {
+    //    summary :+= ctx.mkOr(impmap(t).toSeq : _*)
+    //  }
+    //} else {
+    //  if(impmap(t).size != 2) {
+    //    summary :+= ctx.mkOr(impmap(t).toSeq : _*)
+    //  }
+    //}
+
     //for (a <- impmap.keySet) {
     //  finaland :+= ctx.mkOr(impmap(a).toSeq : _*)
     //}
@@ -933,7 +995,6 @@ object Constraints {
     //println("size of localset")
     //println(localset.size)
 
-    sanityvars :+= ctx.mkAnd(finaland : _*)
     assertConstraint(ctx.mkNot(ctx.mkAnd(finaland : _*)))
     val assertions3 = solver.getAssertions().toSeq.toBuffer 
     val file3 = new File("Assertions3")
@@ -942,6 +1003,9 @@ object Constraints {
     bw3.close()
   } 
   
+  // How about we adopt the same strategy used for MUC generation
+  // i.e. drop those summaries which cause it to be SAT. 
+
   solver2.reset()
   for (a <- assertions1) {
     solver2.assertCnstr(a)
@@ -968,8 +1032,10 @@ object Constraints {
   //println(important_ls)
 
   println("Number of iterations it took to reach UNSAT")
-  println(iterCount)   
+  println(iterCount)
+  //if(solver2.check == Some(false)) {
   terminate("====")
+  //}
   }
 
   def verify(experiment: Experiment, solution: Solution): Option[CoarseSchedule] = {
@@ -1102,13 +1168,13 @@ object Constraints {
 
   private def decidedFateFromTrace(cell: Cell, 
       trace: History, finalIndex: Int): Option[String] = {
+    
     def hasOutcome(outcome: String): Boolean = {
       cell.outcomeBundles.get(outcome) match {
         case None => false
         case Some(bundleSet) => {
           bundleSet.foldLeft(false){
             case (acc, bundle) => acc || trace(finalIndex)(bundle.ports(0))
-          
           }
         }
       }

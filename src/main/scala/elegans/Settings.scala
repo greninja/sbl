@@ -36,8 +36,7 @@ object Settings {
   var useHoles: Boolean = true
   var nbChecks: Int = 0
   var runningMethod: ((Experiment, CoarseSchedule, Option[Constraints.Solution]) => 
-      Option[(Seq[Cells.Cell], Constraints.History)]) =
-    Constraints.runSymbolic _
+      Option[(Seq[Cells.Cell], Constraints.History)]) = Constraints.runSymbolic _
   var bitvectorWidth: Option[Int] = None
   var solution: Option[Constraints.Solution] = None
   var initialInput: Option[Set[(CoarseSchedule, Experiment)]] = None
