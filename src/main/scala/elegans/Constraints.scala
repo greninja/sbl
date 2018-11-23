@@ -761,7 +761,7 @@ object Constraints {
      
      // Increasing the counter to keep a track of iterations required to converge
      iterCount += 1
-     //println("the itercount is " + iterCount)
+     println("the itercount is " + iterCount)
 
      //Getting the model
      val model = solver.getModel
@@ -858,21 +858,6 @@ object Constraints {
        }
       }
 
-     //val model2 = solver2.check match {
-     //   case Some(true) => {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
-     //       solver2.getModel
-     //   }
-     //   case Some(false) => {
-     //       terminate("UNSAT problem")        
-     //   }
-     // }
-      
-     /*/ Writing the generated model2 to a file
-     val file5 = new File("Model2")
-     val bw4 = new BufferedWriter(new FileWriter(file4))
-     bw4.write(model2.toString)
-     bw4.close()*/
-
      //Getting the tracked variables to pass as assumptions to get Unsat Core
      val assumptions = (trackScheduleVarsMap.keySet ++ trackAcHypVarsMap.keySet ++ trackLsVarsMap.keySet).toSeq
      //println("Checking Satisfiability with the assumptions") 
@@ -952,7 +937,7 @@ object Constraints {
     //println(current_forbidden.size)
     
     var finaland = Seq[Z3AST]()
-    //var summary = Seq[Z3AST]()
+    var currentmap = MutableMap[Z3AST, MutableSet[Z3AST]]()
     for(atom <- current_forbidden) {
       val t = tempmap(atom)
       if(impmap.contains(t)==false){
@@ -960,10 +945,39 @@ object Constraints {
       }
       impmap(t) += atom
       finaland  :+= ctx.mkOr(impmap(t).toSeq : _*)
+      for (i <- impmap(t)) {
+         if(currentmap.contains(t)==false){
+          currentmap(t) = MutableSet[Z3AST]()
+         }
+         currentmap(t) += i 
+      }
     } 
 
-    //sanityvars :+= ctx.mkAnd(finaland : _*)
-    //solver2.push()
+    sanityvars :+= ctx.mkAnd(finaland : _*)
+    solver2.push()
+    solver2.assertCnstr(ctx.mkOr(sanityvars : _*))
+    if(solver2.check == Some(true)) {
+      //implies it is overapproximating
+      var currentand = Seq[Z3AST]()
+      val model2 = solver2.getModel
+      for(k <- currentmap.keySet) {
+         if(currentmap(k).size > 1) {
+            val astvalue = model2.eval(k) match {
+              case Some(i) => i
+              case None => terminate("No value!")
+            }
+            val todrop = ctx.mkEq(k, astvalue)
+            currentmap(k) -= todrop
+            currentand :+= ctx.mkOr(currentmap(k).toSeq : _*)
+          }
+         else {
+            currentand :+= ctx.mkOr(currentmap(k).toSeq : _*)          
+         } 
+        }
+      sanityvars = sanityvars.dropRight(1)
+      sanityvars :+= ctx.mkAnd(currentand : _*)
+    }
+    solver2.pop()
 
     //if(t.toString.startsWith("ac")) {
     //  if(impmap(t).size != 4) {

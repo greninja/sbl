@@ -8,13 +8,98 @@
 [0m[[0minfo[0m] [0mRunning elegans.Main --summarizeSchedules[0m
 Fate is :
 Set(Vector(1, 1, 2, 1, 2, 1))
+the itercount is 1
+the itercount is 2
+the itercount is 3
+the itercount is 4
+the itercount is 5
+the itercount is 6
+the itercount is 7
+the itercount is 8
+the itercount is 9
+the itercount is 10
+the itercount is 11
+the itercount is 12
+the itercount is 13
+the itercount is 14
+the itercount is 15
+the itercount is 16
+the itercount is 17
+the itercount is 18
+the itercount is 19
+the itercount is 20
+the itercount is 21
+the itercount is 22
+the itercount is 23
+the itercount is 24
+the itercount is 25
+the itercount is 26
+the itercount is 27
+the itercount is 28
+the itercount is 29
+the itercount is 30
+the itercount is 31
+the itercount is 32
+the itercount is 33
+the itercount is 34
+the itercount is 35
+the itercount is 36
+the itercount is 37
+the itercount is 38
+the itercount is 39
+the itercount is 40
+the itercount is 41
+the itercount is 42
+the itercount is 43
+the itercount is 44
+the itercount is 45
+the itercount is 46
+the itercount is 47
+the itercount is 48
+the itercount is 49
+the itercount is 50
+the itercount is 51
+the itercount is 52
+the itercount is 53
+the itercount is 54
+the itercount is 55
+the itercount is 56
+the itercount is 57
+the itercount is 58
+the itercount is 59
+the itercount is 60
+the itercount is 61
+the itercount is 62
+the itercount is 63
+the itercount is 64
+the itercount is 65
+the itercount is 66
+the itercount is 67
+the itercount is 68
+the itercount is 69
+the itercount is 70
+the itercount is 71
+the itercount is 72
+the itercount is 73
+the itercount is 74
+the itercount is 75
+the itercount is 76
+the itercount is 77
+the itercount is 78
+the itercount is 79
+the itercount is 80
+the itercount is 81
+the itercount is 82
+the itercount is 83
+the itercount is 84
+the itercount is 85
 Sanity check: (should be UNSAT)
 Some(true)
 Number of iterations it took to reach UNSAT
-112
+85
 [31m[ERROR][0m ====
 java.lang.RuntimeException: Nonzero exit code returned from runner: 1
 	at scala.sys.package$.error(package.scala:27)
 [0m[[31mtrace[0m] [0mStack trace suppressed: run [34mlast compile:run[0m for the full output.[0m
 [0m[[31merror[0m] [0m(compile:[31mrun[0m) Nonzero exit code returned from runner: 1[0m
-[0m[[31merror[0m] [0mTotal time: 743 s, completed Nov 22, 2018 6:09:39 PM[0m
+[0m[[31merror[0m] [0mTotal time: 549 s, completed Nov 23, 2018 6:55:39 PM[0m
