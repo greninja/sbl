@@ -87,19 +87,13 @@ the itercount is 76
 the itercount is 77
 the itercount is 78
 the itercount is 79
-the itercount is 80
-the itercount is 81
-the itercount is 82
-the itercount is 83
-the itercount is 84
-the itercount is 85
 Sanity check: (should be UNSAT)
-Some(true)
+Some(false)
 Number of iterations it took to reach UNSAT
-85
+79
 [31m[ERROR][0m ====
 java.lang.RuntimeException: Nonzero exit code returned from runner: 1
 	at scala.sys.package$.error(package.scala:27)
 [0m[[31mtrace[0m] [0mStack trace suppressed: run [34mlast compile:run[0m for the full output.[0m
 [0m[[31merror[0m] [0m(compile:[31mrun[0m) Nonzero exit code returned from runner: 1[0m
-[0m[[31merror[0m] [0mTotal time: 549 s, completed Nov 23, 2018 6:55:39 PM[0m
+[0m[[31merror[0m] [0mTotal time: 512 s, completed Nov 24, 2018 11:59:48 PM[0m

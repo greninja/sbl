@@ -956,10 +956,11 @@ object Constraints {
     sanityvars :+= ctx.mkAnd(finaland : _*)
     solver2.push()
     solver2.assertCnstr(ctx.mkOr(sanityvars : _*))
-    if(solver2.check == Some(true)) {
-      //implies it is overapproximating
-      var currentand = Seq[Z3AST]()
+    while(solver2.check == Some(true)) {
+      //refine until it is approximated correctly
       val model2 = solver2.getModel
+      var c = 0
+      var currentand = Seq[Z3AST]()     
       for(k <- currentmap.keySet) {
          if(currentmap(k).size > 1) {
             val astvalue = model2.eval(k) match {
@@ -971,13 +972,35 @@ object Constraints {
             currentand :+= ctx.mkOr(currentmap(k).toSeq : _*)
           }
          else {
-            currentand :+= ctx.mkOr(currentmap(k).toSeq : _*)          
+            currentand :+= ctx.mkOr(currentmap(k).toSeq : _*)
+            c += 1          
          } 
-        }
-      sanityvars = sanityvars.dropRight(1)
-      sanityvars :+= ctx.mkAnd(currentand : _*)
+      }
+      if(c == currentmap.keys.size) {
+        sanityvars = sanityvars.dropRight(1)
+        sanityvars :+= ctx.mkAnd(current_forbidden.toSeq : _*) 
+      } else {
+        sanityvars = sanityvars.dropRight(1)
+        sanityvars :+= ctx.mkAnd(currentand : _*)
+      } 
+      solver2.pop()
+      solver2.push()
+      solver2.assertCnstr(ctx.mkOr(sanityvars : _*))
     }
     solver2.pop()
+
+    //if(solver2.check == Some(true)) {
+    //  println("finaland")
+    //  println(forinaland)
+    //  println("currentand")
+    //  println(currentand)
+    //  val assertions4 = solver2.getAssertions().toSeq.toBuffer 
+    //  val file4 = new File("Assertions4")
+    //  val bw4 = new BufferedWriter(new FileWriter(file4))
+    //  bw4.write(assertions4.toString)
+    //  bw4.close()
+    //  terminate("generalization strategy failed here!")
+    //}
 
     //if(t.toString.startsWith("ac")) {
     //  if(impmap(t).size != 4) {
