@@ -565,13 +565,16 @@ object Constraints {
     translationProfiler.start
 
     val scheduleSet = inputs.map(_._1)
+    println("schedule set")
+    println(scheduleSet)
 
     for (sched <- scheduleSet) {
       val experiments = inputs.filter(_._1 == sched).map(_._2).toList
       log("Schedule: ")
       log((sched map (step => step.mkString(" "))).mkString("\n"))
       log("Experiments:")
-      log(experiments.mkString("\n"))
+      //log(experiments.mkString("\n"))
+      println(experiments)
       assertExperiments(sched.size, Some(sched), None, experiments, AssertFateDecision)
     }
 
@@ -580,7 +583,7 @@ object Constraints {
       log("Expecting to see in " + schedString + " run:")
       log(exp)
       assertExperiments(Settings.runLength, sched, None, 
-        List(exp), AssertFateDecision)
+                        List(exp), AssertFateDecision)
     }
 
     for ((exp, sched) <- toAvoidInSomeRun) {
@@ -588,7 +591,7 @@ object Constraints {
       log("Expecting to avoid in " + schedString + " run:")
       log(exp)
       assertExperiments(Settings.runLength, sched, None, 
-        List(exp), AssertNegatedFateDecision)
+                        List(exp), AssertNegatedFateDecision)
     }
 
     for (s <- semantics)
@@ -599,8 +602,9 @@ object Constraints {
     log("Invoking Z3.")
     synthesisProfiler.start
     Statistics.solverCalled()
-    ctx.checkAndGetModel match {
-      case (Some(true), m) => {
+    solver.check
+    solver.getModel match {
+      case m => {
         Statistics.solverReturned()
         synthesisProfiler.stop
         
@@ -612,7 +616,6 @@ object Constraints {
           recovered ++= sem.solution(m)
 
         m.delete
-
         Some(recovered)
       }
       case _ => {
@@ -953,6 +956,7 @@ object Constraints {
       }
     } 
 
+    // Refinement procedure
     sanityvars :+= ctx.mkAnd(finaland : _*)
     solver2.push()
     solver2.assertCnstr(ctx.mkOr(sanityvars : _*))
@@ -1040,9 +1044,6 @@ object Constraints {
     bw3.close()
   } 
   
-  // How about we adopt the same strategy used for MUC generation
-  // i.e. drop those summaries which cause it to be SAT. 
-
   solver2.reset()
   for (a <- assertions1) {
     solver2.assertCnstr(a)

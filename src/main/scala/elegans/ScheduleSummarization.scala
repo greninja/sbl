@@ -27,8 +27,7 @@ object ScheduleSummarization {
 		synthesizeSchedule(e, solution)
 	}
 
-	def summarizeSchedules(experiments : Seq[Experiment], 
-		solution : Option[Solution]) = {
+	def summarizeSchedules(experiments : Seq[Experiment], solution : Option[Solution]) = {
 		for (e <- experiments) {
 			summarizeSchedule(e, solution)
 			}

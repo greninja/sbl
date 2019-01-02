@@ -61,46 +61,41 @@ object CEGIS {
   }
 
   /** Finds two models that differ in their outcome for the given experiment */
-  def solveByDifferentiating(experiments: List[Experiment], experimentToDiff: Experiment): Option[(Solution, Solution)] = {
-    // get one solution
-    val solutions = solve(experiments, 1)
-    
-    if (solutions.size == 0) {
-      logWarning("Cannot find any model")
-      None
-    } else {
-      log("Found first model, now searching for the second.")
-      val firstSolution = solutions.head
-
-      val syncSched = Schedules.syncCoarseSchedule(Model.nbAsyncCells,
-        Settings.runLength)
-
-      // remove the outcome on an execution of the experiment to diff
-      Settings.runningMethod(experimentToDiff, syncSched, Some(firstSolution)) match {
-        case Some((cells, trace)) => {
-          val decided = decidedFates(cells, trace)
-          log("Decided fate:")
-          log(decided.mkString(" "))
-          val toAvoid = (experimentToDiff.copy(
-            fates = Set(decided)
-          ), Some(syncSched))
-
-          val newSolutions = solve(experiments, 1, 
-            toAvoidInSomeRun = Set(toAvoid))
-          if (newSolutions.size == 0) {
-            logWarning("Cannot find model with different outcome")
-            None
-          } else {
-            val secondSolution = newSolutions.head
-            Some((firstSolution, secondSolution))
-          }
-        }
-        case None => terminate("Should not have happened.")
-      }
-
-
-    }
-  }
+  //def solveByDifferentiating(experiments: List[Experiment], experimentToDiff: Experiment): Option[(Solution, Solution)] = {
+  //  // get one solution
+  //  val solutions = solve(experiments, 1)
+  //  
+  //  if (solutions.size == 0) {
+  //    logWarning("Cannot find any model")
+  //    None
+  //  } else {
+  //    log("Found first model, now searching for the second.")
+  //    val firstSolution = solutions.head
+  //    val syncSched = Schedules.syncCoarseSchedule(Model.nbAsyncCells,
+  //      Settings.runLength)
+  //    // remove the outcome on an execution of the experiment to diff
+  //    Settings.runningMethod(experimentToDiff, syncSched, Some(firstSolution)) match {
+  //      case Some((cells, trace)) => {
+  //        val decided = decidedFates(cells, trace)
+  //        log("Decided fate:")
+  //        log(decided.mkString(" "))
+  //        val toAvoid = (experimentToDiff.copy(
+  //          fates = Set(decided)
+  //        ), Some(syncSched))
+  //        val newSolutions = solve(experiments, 1, 
+  //          toAvoidInSomeRun = Set(toAvoid))
+  //        if (newSolutions.size == 0) {
+  //          logWarning("Cannot find model with different outcome")
+  //          None
+  //        } else {
+  //          val secondSolution = newSolutions.head
+  //          Some((firstSolution, secondSolution))
+  //        }
+  //      }
+  //      case None => terminate("Should not have happened.")
+  //    }
+  //  }
+  //}
 
   def solveDiff(
       expToDiff: Experiment,
@@ -146,21 +141,23 @@ object CEGIS {
       excludedFromNondeterminismCheck: Set[Experiment] = Set()): Set[Solution] = {
     
     var continue = true
-
     var nondetCexToSeeInSomeRun = toSeeInSomeRun
 
-    // // start with a non-GF experiment and a GF one
+    // start with a non-GF experiment and a GF one
     val wildtypeLin12Exp  = experiments.find(_.mutations.get("lin12") match {
       case Some("wt") => true
       case _ => false
     })
-    val gfLin12Exp        = experiments.find(_.mutations.get("lin12") match {
+
+    val gfLin12Exp = experiments.find(_.mutations.get("lin12") match {
       case Some("gf") => true
       case _ => false
     })
 
     var vpcStudyInputs = 
         (wildtypeLin12Exp.toSet ++ gfLin12Exp.toSet) map (exp => (Settings.coarseSchedule, exp))
+    println("vpcStudyInputs:")
+    println(vpcStudyInputs)
 
     var inputPairs: Set[(CoarseSchedule, Experiment)] =
       if (vpcStudyInputs.isEmpty) Set((Settings.coarseSchedule, experiments.head))
@@ -173,7 +170,7 @@ object CEGIS {
 
     while (continue) {
       cegisLoopCounter += 1
-      // saveInputSet(inputPairs, cegisLoopCounter)
+      //saveInputSet(inputPairs, cegisLoopCounter)
 
       val fromSynthesizer = Constraints.synthesize(inputPairs, nondetCexToSeeInSomeRun, toAvoidInSomeRun) 
       println("This is fromsynthesize which is the solution")
@@ -232,9 +229,8 @@ object CEGIS {
                     log("Enumerated " + nbMaxModels + " model(s)!")
                     continue = false
                   } else {
-                    log("Need to enumerate " + howManyAreMissing + " mode models!")
+                    log("Need to enumerate" + howManyAreMissing + " mode models!")
                   }
-                
                 }
               }
             }
@@ -270,14 +266,14 @@ object CEGIS {
         makeLink(pathName, linkName)
       }
 
-      def drawTransition(e: Option[Experiment], suffix: String) = e match {
-        case Some(e) =>
-          var dots = getTransitionDotFormat(s, e)
-          for (dot <- dots){
-            // println(dot)
-          }
-        case None =>
-      }
+      //def drawTransition(e: Option[Experiment], suffix: String) = e match {
+      //  case Some(e) =>
+      //    var dots = getTransitionDotFormat(s, e)
+      //    for (dot <- dots){
+      //      // println(dot)
+      //    }
+      //  case None =>
+      //}
 
       val wildtypeLin12Exp  = experiments.find(_.mutations.get("lin12") match {
         case Some("wt") => true

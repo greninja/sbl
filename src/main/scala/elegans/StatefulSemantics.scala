@@ -65,10 +65,9 @@ object StatefulSemantics extends Semantics {
       val concreteTable = for ((entry, symbol) <- table) yield {
         model.evalAs[Int](symbol) match {
           case Some(modelValue) => (entry, modelValue)
-          case None => terminate("No value defined for transition: " + entry)
+          case None => terminate("No value defined for transition: " + entry + "and symbol " + symbol)
         }
       }
-
       (id, concreteTable)
     }
 
